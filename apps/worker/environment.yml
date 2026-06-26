@@ -1,0 +1,17 @@
+name: worker-env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - fastapi==0.115.8
+      - uvicorn==0.34.0
+      - ultralytics==8.3.70
+      - opencv-python-headless==4.11.0.86
+      - redis==5.2.1
+      - pytest==8.3.4
+      - pytest-cov==6.0.0
+      - httpx==0.28.1
+      - ensemble-boxes==1.0.4

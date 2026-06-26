@@ -1,0 +1,16 @@
+{
+  "name": "recursive-object-detector",
+  "private": true,
+  "packageManager": "pnpm@11.5.2",
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "turbo": "^2.4.0"
+  },
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+  }
+}

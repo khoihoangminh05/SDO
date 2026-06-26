@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SDO – Smart Detection & Optimization | Research Presentation</title>
+  <meta name="description" content="Thuyết trình nghiên cứu hệ thống nhận diện đèn giao thông thông minh sử dụng YOLOv8 và xử lý ảnh đa tầng." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ═══════════════════════════════════════════
+       RESET & BASE
+    ═══════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --red:    #ff4d4d;
+      --amber:  #fbbf24;
+      --green:  #22c55e;
+      --blue:   #3b82f6;
+      --indigo: #6366f1;
+      --purple: #a855f7;
+      --bg:     #070b14;
+      --surface:#0d1526;
+      --card:   #111827;
+      --border: rgba(255,255,255,0.08);
+      --text:   #f1f5f9;
+      --muted:  #94a3b8;
+      --accent: #38bdf8;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ═══════════════════════════════════════════
+       SLIDE CONTAINER
+    ═══════════════════════════════════════════ */
+    #presentation {
+      position: relative;
+      width: 100vw; height: 100vh;
+      overflow: hidden;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 60px 80px;
+      opacity: 0;
+      transform: translateX(60px);
+      transition: opacity 0.55s cubic-bezier(.4,0,.2,1),
+                  transform 0.55s cubic-bezier(.4,0,.2,1);
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .slide.active {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+    .slide.exit {
+      opacity: 0;
+      transform: translateX(-60px);
+    }
+
+    /* ═══════════════════════════════════════════
+       GLOBAL BG GRID
+    ═══════════════════════════════════════════ */
+    .slide::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(56,189,248,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(56,189,248,0.03) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+    }
+
+    /* ═══════════════════════════════════════════
+       NAV BAR
+    ═══════════════════════════════════════════ */
+    #nav {
+      position: fixed;
+      bottom: 36px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(13,21,38,0.85);
+      border: 1px solid var(--border);
+      border-radius: 50px;
+      padding: 12px 20px;
+      backdrop-filter: blur(16px);
+    }
+    #nav button {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text);
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 18px;
+      display: grid; place-items: center;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    #nav button:hover { background: rgba(56,189,248,0.12); border-color: var(--accent); }
+
+    #slide-dots {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background 0.3s, transform 0.3s;
+      cursor: pointer;
+    }
+    .dot.active { background: var(--accent); transform: scale(1.4); }
+
+    #slide-counter {
+      font-size: 12px;
+      color: var(--muted);
+      min-width: 48px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ═══════════════════════════════════════════
+       PROGRESS BAR
+    ═══════════════════════════════════════════ */
+    #progress-bar {
+      position: fixed;
+      top: 0; left: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent), var(--purple));
+      transition: width 0.4s ease;
+      z-index: 200;
+    }
+
+    /* ═══════════════════════════════════════════
+       SLIDE 1 – COVER
+    ═══════════════════════════════════════════ */
+    #slide-cover {
+      background: radial-gradient(ellipse 70% 60% at 50% 30%, rgba(56,189,248,0.08) 0%, transparent 70%),
+                  var(--bg);
+      text-align: center;
+    }
+
+    .cover-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(56,189,248,0.1);
+      border: 1px solid rgba(56,189,248,0.3);
+      color: var(--accent);
+      padding: 6px 16px;
+      border-radius: 30px;
+      font-size: 13px;
+      font-weight: 500;
+      letter-spacing: .5px;
+      margin-bottom: 32px;
+      animation: fadeUp 0.7s 0.2s both;
+    }
+
+    .cover-title {
+      font-size: clamp(2.2rem, 4.5vw, 3.8rem);
+      font-weight: 900;
+      line-height: 1.1;
+      background: linear-gradient(135deg, #f1f5f9 30%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 20px;
+      animation: fadeUp 0.7s 0.35s both;
+    }
+
+    .cover-subtitle {
+      font-size: clamp(1rem, 2vw, 1.25rem);
+      color: var(--muted);
+      max-width: 680px;
+      line-height: 1.6;
+      margin-bottom: 48px;
+      animation: fadeUp 0.7s 0.5s both;
+    }
+
+    .cover-traffic-lights {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 52px;
+      animation: fadeUp 0.7s 0.65s both;
+    }
+    .tl-box {
+      width: 36px;
+      background: #1a1a2e;
+      border: 2px solid rgba(255,255,255,0.12);
+      border-radius: 20px;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      align-items: center;
+    }
+    .tl-light {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      transition: box-shadow 0.3s;
+    }
+    .tl-light.r { background: var(--red);   box-shadow: 0 0 10px var(--red); }
+    .tl-light.y { background: #333; }
+    .tl-light.g { background: #333; }
+    .tl-light.r2 { background: #333; }
+    .tl-light.y2 { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+    .tl-light.g2 { background: #333; }
+    .tl-light.r3 { background: #333; }
+    .tl-light.y3 { background: #333; }
+    .tl-light.g3 { background: var(--green); box-shadow: 0 0 14px var(--green); }
+
+    .cover-authors {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+      justify-content: center;
+      animation: fadeUp 0.7s 0.8s both;
+    }
+    .author-chip {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 20px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .author-chip strong { color: var(--text); display: block; font-size: 14px; }
+
+    /* ═══════════════════════════════════════════
+       SLIDE HEADER
+    ═══════════════════════════════════════════ */
+    .slide-header {
+      width: 100%;
+      margin-bottom: 36px;
+    }
+    .slide-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+    .slide-tag .dot-tag {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+    .slide-h1 {
+      font-size: clamp(1.8rem, 3.5vw, 2.6rem);
+      font-weight: 800;
+      line-height: 1.15;
+      color: var(--text);
+    }
+    .slide-h1 span {
+      background: linear-gradient(90deg, var(--accent), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .slide-divider {
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), transparent);
+      margin-top: 14px;
+      border-radius: 2px;
+      width: 80px;
+    }
+
+    /* ═══════════════════════════════════════════
+       CARDS / GRIDS
+    ═══════════════════════════════════════════ */
+    .card-grid {
+      display: grid;
+      gap: 18px;
+      width: 100%;
+    }
+    .card-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+    .card-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .card:hover {
+      border-color: rgba(56,189,248,0.3);
+      transform: translateY(-2px);
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: 16px 16px 0 0;
+    }
+    .card.accent-red::before    { background: var(--red); }
+    .card.accent-amber::before  { background: var(--amber); }
+    .card.accent-green::before  { background: var(--green); }
+    .card.accent-blue::before   { background: var(--blue); }
+    .card.accent-indigo::before { background: var(--indigo); }
+    .card.accent-purple::before { background: var(--purple); }
+    .card.accent-cyan::before   { background: var(--accent); }
+
+    .card-icon {
+      font-size: 2rem;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .card-body {
+      font-size: 13.5px;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    /* ═══════════════════════════════════════════
+       TIMELINE (SLIDE 2)
+    ═══════════════════════════════════════════ */
+    .timeline {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    .timeline-item {
+      display: flex;
+      gap: 20px;
+      position: relative;
+    }
+    .timeline-item:not(:last-child)::after {
+      content: '';
+      position: absolute;
+      left: 19px;
+      top: 44px;
+      bottom: 0;
+      width: 2px;
+      background: var(--border);
+    }
+    .tl-dot {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      display: grid; place-items: center;
+      font-size: 18px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .timeline-content {
+      padding-bottom: 22px;
+      flex: 1;
+    }
+    .timeline-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .timeline-title {
+      font-size: 15.5px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .timeline-body {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .timeline-body strong { color: var(--text); }
+
+    /* ═══════════════════════════════════════════
+       TAG / BADGE
+    ═══════════════════════════════════════════ */
+    .tag {
+      display: inline-block;
+      background: rgba(56,189,248,0.1);
+      border: 1px solid rgba(56,189,248,0.2);
+      color: var(--accent);
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .tag.red    { background: rgba(255,77,77,0.1);  border-color: rgba(255,77,77,0.25);  color: #ff6b6b; }
+    .tag.amber  { background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.25); color: var(--amber); }
+    .tag.green  { background: rgba(34,197,94,0.1);  border-color: rgba(34,197,94,0.25);  color: var(--green); }
+    .tag.purple { background: rgba(168,85,247,0.1); border-color: rgba(168,85,247,0.25); color: var(--purple); }
+
+    /* ═══════════════════════════════════════════
+       STAT ROW
+    ═══════════════════════════════════════════ */
+    .stat-row {
+      display: flex;
+      gap: 20px;
+      width: 100%;
+    }
+    .stat-box {
+      flex: 1;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px 24px;
+      text-align: center;
+    }
+    .stat-num {
+      font-size: 2.6rem;
+      font-weight: 900;
+      line-height: 1;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .stat-label {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    /* ═══════════════════════════════════════════
+       COMPARISON TABLE
+    ═══════════════════════════════════════════ */
+    .compare-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+    }
+    .compare-table th {
+      background: var(--surface);
+      color: var(--accent);
+      padding: 10px 16px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+    }
+    .compare-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      color: var(--muted);
+      vertical-align: top;
+    }
+    .compare-table td:first-child { color: var(--text); font-weight: 600; }
+    .compare-table tr:hover td { background: rgba(255,255,255,0.02); }
+    .check { color: var(--green); font-weight: 700; }
+    .cross { color: var(--red); font-weight: 700; }
+
+    /* ═══════════════════════════════════════════
+       CODE BLOCK
+    ═══════════════════════════════════════════ */
+    .code-block {
+      background: #0a0f1e;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 22px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.8;
+      color: #a9b1d6;
+      overflow-x: auto;
+    }
+    .code-block .kw  { color: var(--purple); }
+    .code-block .str { color: var(--green); }
+    .code-block .num { color: var(--amber); }
+    .code-block .cm  { color: #4a5568; }
+    .code-block .fn  { color: var(--accent); }
+
+    /* ═══════════════════════════════════════════
+       ARCHITECTURE DIAGRAM (SLIDE 5)
+    ═══════════════════════════════════════════ */
+    .arch-flow {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      width: 100%;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .arch-node {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 20px;
+      text-align: center;
+      min-width: 120px;
+    }
+    .arch-node .an-icon { font-size: 1.8rem; margin-bottom: 6px; }
+    .arch-node .an-title { font-size: 13px; font-weight: 700; color: var(--text); }
+    .arch-node .an-sub   { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .arch-arrow {
+      width: 40px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent), var(--purple));
+      position: relative;
+      flex-shrink: 0;
+    }
+    .arch-arrow::after {
+      content: '▶';
+      position: absolute;
+      right: -8px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--purple);
+      font-size: 12px;
+    }
+
+    /* ═══════════════════════════════════════════
+       NOVELTY HIGHLIGHT BOX
+    ═══════════════════════════════════════════ */
+    .novelty-box {
+      background: linear-gradient(135deg, rgba(56,189,248,0.07), rgba(168,85,247,0.07));
+      border: 1px solid rgba(56,189,248,0.2);
+      border-radius: 16px;
+      padding: 22px 28px;
+      width: 100%;
+    }
+    .novelty-box .nb-num {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .novelty-box .nb-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .novelty-box .nb-body {
+      font-size: 13.5px;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    /* ═══════════════════════════════════════════
+       HSV VIS (SLIDE 6)
+    ═══════════════════════════════════════════ */
+    .hsv-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+    }
+    .hsv-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .hsv-bar-label {
+      width: 70px;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hsv-light-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+    }
+    .hsv-track {
+      flex: 1;
+      height: 28px;
+      border-radius: 6px;
+      background: #0d1526;
+      position: relative;
+      overflow: hidden;
+    }
+    .hsv-fill {
+      position: absolute;
+      top: 0; bottom: 0;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      padding-left: 10px;
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 600;
+      color: rgba(255,255,255,0.9);
+    }
+    .hsv-bar-info {
+      width: 120px;
+      font-size: 12px;
+      color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ═══════════════════════════════════════════
+       RESULT METRICS
+    ═══════════════════════════════════════════ */
+    .metric-row {
+      display: flex;
+      gap: 12px;
+      width: 100%;
+    }
+    .metric-box {
+      flex: 1;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+      position: relative;
+    }
+    .metric-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .metric-value {
+      font-size: 1.9rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .metric-change {
+      font-size: 12px;
+      color: var(--green);
+      margin-top: 6px;
+      font-weight: 500;
+    }
+    .metric-change.neg { color: var(--red); }
+
+    /* ═══════════════════════════════════════════
+       SECTION TITLE SLIDE
+    ═══════════════════════════════════════════ */
+    .section-slide {
+      background: radial-gradient(ellipse 60% 50% at 50% 50%, rgba(99,102,241,0.12) 0%, transparent 70%);
+    }
+    .section-num {
+      font-size: 7rem;
+      font-weight: 900;
+      opacity: 0.05;
+      position: absolute;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-variant-numeric: tabular-nums;
+    }
+    .section-label {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+    .section-big {
+      font-size: clamp(2.2rem, 4vw, 3rem);
+      font-weight: 900;
+      text-align: center;
+      line-height: 1.15;
+    }
+
+    /* ═══════════════════════════════════════════
+       FINAL SLIDE
+    ═══════════════════════════════════════════ */
+    .final-slide {
+      background:
+        radial-gradient(ellipse 60% 50% at 30% 50%, rgba(34,197,94,0.06), transparent),
+        radial-gradient(ellipse 60% 50% at 70% 50%, rgba(56,189,248,0.06), transparent),
+        var(--bg);
+      text-align: center;
+    }
+
+    /* ═══════════════════════════════════════════
+       ANIMATIONS
+    ═══════════════════════════════════════════ */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes pulse-green {
+      0%, 100% { box-shadow: 0 0 10px var(--green), 0 0 20px rgba(34,197,94,0.4); }
+      50%       { box-shadow: 0 0 18px var(--green), 0 0 35px rgba(34,197,94,0.6); }
+    }
+    .tl-light.g3 { animation: pulse-green 2s ease-in-out infinite; }
+
+    /* keyboard hint */
+    #kb-hint {
+      position: fixed;
+      top: 20px; right: 24px;
+      font-size: 11px;
+      color: rgba(148,163,184,0.4);
+      pointer-events: none;
+    }
+
+    /* two-col layout helper */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      width: 100%;
+    }
+    .stack { display: flex; flex-direction: column; gap: 14px; }
+
+    /* list items */
+    .check-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .check-list li {
+      font-size: 13.5px;
+      color: var(--muted);
+      display: flex;
+      gap: 10px;
+      line-height: 1.5;
+    }
+    .check-list li::before {
+      content: '✓';
+      color: var(--green);
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .check-list li.warn::before { content: '✕'; color: var(--red); }
+    .check-list li strong { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<div id="progress-bar"></div>
+<div id="kb-hint">← → hoặc phím mũi tên để điều hướng</div>
+
+<div id="presentation">
+
+  <!-- ════════════════════════════════════════
+       SLIDE 1 – COVER
+  ════════════════════════════════════════ -->
+  <section class="slide active" id="slide-cover">
+    <div class="cover-badge">🚦 Computer Vision · Traffic Intelligence</div>
+    <h1 class="cover-title">Hệ Thống Nhận Diện Đèn Giao Thông<br />Thông Minh Đa Tầng</h1>
+    <p class="cover-subtitle">Nghiên cứu và phát triển pipeline phát hiện đèn giao thông, trạng thái tín hiệu và thời gian đếm ngược sử dụng YOLOv8 kết hợp xử lý ảnh HSV thích nghi.</p>
+    <div class="cover-traffic-lights">
+      <div class="tl-box">
+        <div class="tl-light r"></div>
+        <div class="tl-light y"></div>
+        <div class="tl-light g"></div>
+      </div>
+      <div class="tl-box">
+        <div class="tl-light r2"></div>
+        <div class="tl-light y2"></div>
+        <div class="tl-light g2"></div>
+      </div>
+      <div class="tl-box">
+        <div class="tl-light r3"></div>
+        <div class="tl-light y3"></div>
+        <div class="tl-light g3"></div>
+      </div>
+    </div>
+    <div class="cover-authors">
+      <div class="author-chip"><strong>SDO Research Team</strong>Smart Detection &amp; Optimization</div>
+      <div class="author-chip"><strong>Công nghệ lõi</strong>YOLOv8 · FastAPI · NestJS</div>
+      <div class="author-chip"><strong>Năm</strong>2025 – 2026</div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════
+       SLIDE 2 – MỤC LỤC
+  ════════════════════════════════════════ -->
+  <section class="slide" id="slide-toc">
+    <div class="slide-header">
+      <div class="slide-tag"><span class="dot-tag"></span>Overview</div>
+      <h2 class="slide-h1">Cấu Trúc Bài Thuyết Trình</h2>
+      <div class="slide-divider"></div>
+    </div>
+    <div class="card-grid cols-2" style="max-width:900px">
+      <div class="card accent-red">
+        <div class="card-icon">🔍</div>
+        <div class="card-title">1. Khoảng Trống Nghiên Cứu</div>
+        <div class="card-body">Phân tích những hạn chế của các công trình hiện có về phát hiện đèn giao thông và đọc số đếm ngược.</div>
+      </div>
+      <div class="card accent-blue">
+        <div class="card-icon">📚</div>
+        <div class="card-title">2. Cơ Sở Lý Luận</div>
+        <div class="card-body">Nền tảng lý thuyết: Object Detection, Color Space Analysis, OCR Pipeline và Microservices Architecture.</div>
+      </div>
+      <div class="card accent-purple">
+        <div class="card-icon">✨</div>
+        <div class="card-title">3. Tính Mới (Novelty)</div>
+        <div class="card-body">Điểm khác biệt của SDO so với các công trình trước: pipeline đơn luồng, HSV thích nghi, bộ lọc biển báo.</div>
+      </div>
+      <div class="card accent-green">
+        <div class="card-icon">📊</div>
+        <div class="card-title">4. Kết Quả &amp; Kiểm Chứng</div>
+        <div class="card-body">Số liệu thực nghiệm, so sánh trước/sau tối ưu, và minh chứng hoạt động trên ảnh thực tế.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════
+       SLIDE 3 – SECTION: RESEARCH GAP
+  ════════════════════════════════════════ -->
+  <section class="slide section-slide" id="slide-gap-section">
+    <div class="section-num">01</div>
+    <div class="section-label">Section 01</div>
+    <h2 class="section-big">Khoảng Trống<br /><span style="background:linear-gradient(90deg,var(--red),var(--amber));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Nghiên Cứu</span></h2>
+  </section>
+
+  <!-- ════════════════════════════════════════
+       SLIDE 4 – RESEARCH GAP (1/2)
+  ════════════════════════════════════════ -->
+  <section class="slide" id="slide-gap1">
+    <div class="slide-header">
+      <div class="slide-tag"><span class="dot-tag"></span>Research Gap · 01</div>
+      <h2 class="slide-h1">Hạn Chế Của Nghiên Cứu <span>Hiện Có</span></h2>
+      <div class="slide-divider"></div>
+    </div>
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="tl-dot">📸</div>
+        <div class="timeline-content">
+          <div class="timeline-label">Vấn đề #1</div>
+          <div class="timeline-title">Phát hiện thiếu chuyên biệt — Bị lẫn biển báo giao thông</div>
+          <div class="timeline-body">Các mô hình YOLO phổ quát (COCO-pretrained) không phân biệt được đèn giao thông với biển báo vòng tròn, biển chỉ đường, dẫn đến <strong>false-positive rate cao</strong> trong môi trường đô thị phức tạp tại Việt Nam.</div>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-dot">🎨</div>
+        <div class="timeline-content">
+          <div class="timeline-label">Vấn đề #2</div>
+          <div class="timeline-title">Ngưỡng màu HSV cứng nhắc — Bỏ sót đèn xanh và đèn LED</div>
+          <div class="timeline-body">Hầu hết các hệ thống hiện tại sử dụng ngưỡng hue xanh cố định <strong>[36, 90]</strong>, không phủ được các đèn LED xanh lá có màu xanh lơ/cyan <strong>[90–110]</strong> phổ biến ở Việt Nam, gây bỏ sót đèn xanh.</div>
+        </div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-dot">🔢</div>
+        <div class="timeline-content">
+          <div class="timeline-label">Vấn đề #3</div>
+          <div class="timeline-title">Chưa tích hợp nhận diện số đếm ngược</div>
+          <div class="timeline-body">Hầu hết nghiên cứu chỉ xác định <em>trạng thái</em> đèn (đỏ/vàng/xanh) mà <strong>không đọc được giá trị thời gian đếm ngược</strong> — thông tin quan trọng cho hệ thống ADAS và điều phối giao thông tự động.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════
+       SLIDE 5 – RESEARCH GAP (2/2)
+  ════════════════════════════════════════ -->
+  <section class="slide" id="slide-gap2">
+    <div class="slide-header">
+      <div class="slide-tag"><span class="dot-tag"></span>Research Gap · 02</div>
+      <h2 class="slide-h1">Hạn Chế <span>Kiến Trúc &amp; Hiệu Năng</span></h2>
+      <div class="slide-divider"></div>
+    </div>
+    <div class="two-col">
+      <div class="stack">
+        <div class="card accent-red">
+          <div class="card-title">⚠️ Đệ quy / Phân vùng phức tạp</div>
+          <div class="card-body">Các phương pháp dựa trên <strong>Quadtree / Spatial Slicing</strong> tăng thêm latency (×3–5×) và sinh ra vùng phân tích chồng chéo gây nhân bản kết quả. Không phù hợp với yêu cầu real-time.</div>
+        </div>
+        <div class="card accent-amber">
+          <div class="card-title">⚠️ Độ phân giải thấp cho vật thể nhỏ</div>
+          <div class="card-body">Inference tại <code style="font-family:monospace;color:var(--amber)">imgsz=640</code> khiến đèn giao thông nhỏ (xa, stride-4) bị underrepresented, confidence thấp (&lt;0.2), và nhiều đèn bị bỏ sót.</div>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="card accent-indigo">
+          <div class="card-title">⚠️ Thiếu tích hợp end-to-end</div>
+          <div class="card-body">Hầu hết hệ thống hoạt động như pipeline rời rạc: detection → manual color check → separate OCR, không có hệ thống microservice tích hợp quản lý trạng thái và kết quả tập trung.</div>
+        </div>
+        <div class="card accent-purple">
+          <div class="card-title">⚠️ Thiếu bộ lọc ngữ nghĩa (semantic filter)</div>
+          <div class="card-body">Không có cơ chế kiểm tra tỷ lệ diện tích (area-fill ratio) giữa detection con và vùng cha để loại bỏ các phát hiện nhầm từ biển báo tròn/vuông.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════
+       SLIDE 6 – SECTION: CƠ SỞ LÝ LUẬN
+  ════════════════════════════════════════ -->
+  <section class="slide section-slide" id="slide-theory-section">
+    <div class="section-num">02</div>
+    <div class="section-label">Section 02</div>
+    <h2 class="section-big">Cơ Sở<br /><span style="background:linear-gradient(90deg,var(--blue),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Lý Luận</span></h2>
+  </section>
+
+  <!-- ════════════════════════════════════════
+       SLIDE 7 – LÝ LUẬN (1/2): YOLO + HSV
+  ════════════════════════════════════════ -->
+  <section class="slide" id="slide-theory1">
+    <div class="slide-header">
+      <div class="slide-tag"><span class="dot-tag"></span>Cơ Sở Lý Luận · 01</div>
+      <h2 class="slide-h1">YOLOv8 &amp; <span>Phân Tích Không Gian Màu HSV</span></h2>
+      <div class="slide-divider"></div>
+    </div>
+    <div class="two-col">
+      <div class="stack">
+        <div class="card accent-blue">
+          <div class="card-title">🧠 YOLOv8 — Real-time Object Detection</div>
+          <div class="card-body">
+            Kiến trúc CSPNet + C2f backbone với multi-scale feature pyramid (P3/P4/P5). Anchor-free head cho phép detection vật thể ở nhiều tỷ lệ. Inference tại <strong>imgsz=1280</strong> tăng khả năng phát hiện vật thể nhỏ (stride-4 features).
+          </div>
+        </div>
+        <div class="card accent-cyan">
+          <div class="card-title">🎨 Không Gian Màu HSV</div>
+          <div class="card-body">
+            Hue-Saturation-Value tách biệt thông tin màu sắc khỏi độ sáng, phù hợp với điều kiện ánh sáng biến đổi. Cho phép định nghĩa ngưỡng màu cho đèn LED bất kể cường độ sáng môi trường.
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="hsv-bars">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;">Ngưỡng HSV — Hue Range (0–180)</p>
+          <div class="hsv-bar-row">
+            <div class="hsv-bar-label"><div class="hsv-light-dot" style="background:var(--red)"></div>Đỏ</div>
+            <div class="hsv-track">
+              <div class="hsv-fill" style="left:0%;width:6.7%;background:rgba(255,77,77,0.6);">0–12</div>
+            </div>
+            <div class="hsv-bar-info">+ 91.7–100%</div>
+          </div>
+          <div class="hsv-bar-row">
+            <div class="hsv-bar-label"><div class="hsv-light-dot" style="background:var(--amber)"></div>Vàng</div>
+            <div class="hsv-track">
+              <div class="hsv-fill" style="left:7.2%;width:11.7%;background:rgba(251,191,36,0.6);">13–34</div>
+            </div>
+            <div class="hsv-bar-info">Hue: 13–34</div>
+          </div>
+          <div class="hsv-bar-row">
+            <div class="hsv-bar-label"><div class="hsv-light-dot" style="background:var(--green)"></div>Xanh</div>
+            <div class="hsv-track">
+              <div class="hsv-fill" style="left:19.4%;width:41.7%;background:rgba(34,197,94,0.6);">35–110 <span style="color:rgba(255,255,255,0.5);font-weight:400;margin-left:4px;">(mở rộng)</span></div>
+            </div>
+            <div class="hsv-bar-info">Phủ cyan LED</div>
+          </div>
+          <div style="margin-top:12px;">
+            <div class="card" style="padding:14px 18px;">
+              <div class="card-title" style="font-size:13px;margin-bottom:6px;">🔑 Lý do mở rộng ngưỡng xanh</div>
+              <div class="card-body">Đèn LED xanh lá hiện đại phát xạ ở bước sóng <strong>495–565nm</strong>, tương đương Hue ~90–110 trong HSV. Ngưỡng cũ [36,90] bỏ sót ~30% đèn xanh thực tế tại Việt Nam.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════
+       SLIDE 8 – LÝ LUẬN (2/2): OCR + ARCH
+  ════════════════════════════════════════ -->
+  <section class="slide" id="slide-theory2">
+    <div class="slide-header">
+      <div class="slide-tag"><span class="dot-tag"></span>Cơ Sở Lý Luận · 02</div>
+      <h2 class="slide-h1">OCR Pipeline &amp; <span>Kiến Trúc Microservices</span></h2>
+      <div class="slide-divider"></div>
+    </div>
+    <div class="stack">
+      <div class="arch-flow">
+        <div class="arch-node">
+          <div class="an-icon">📷</div>
+          <div class="an-title">Camera Input</div>
+          <div class="an-sub">Image Frame</div>
+        </div>
+        <div class="arch-arrow"></div>
+        <div class="arch-node" style="border-color:rgba(56,189,248,0.4);">
+          <div class="an-icon">🔭</div>
+          <div class="an-title">YOLOv8</div>
+          <div class="an-sub">imgsz=1280</div>
+        </div>
+        <div class="arch-arrow"></div>
+        <div class="arch-node">
+          <div class="an-icon">🎨</div>
+          <div class="an-title">HSV Filter</div>
+          <div class="an-sub">Color State</div>
+        </div>
+        <div class="arch-arrow"></div>
+        <div class="arch-node">
+          <div class="an-icon">🔢</div>
+          <div class="an-title">OCR Engine</div>
+          <div class="an-sub">EasyOCR</div>
+        </div>
+        <div class="arch-arrow"></div>
+        <div class="arch-node" style="border-color:rgba(34,197,94,0.4);">
+          <div class="an-icon">📊</div>
+          <div class="an-title">Result API</div>
+          <div class="an-sub">NestJS/FastAPI</div>
+        </div>
+      </div>
+      <div class="card-grid cols-3">
+        <div class="card accent-blue">
+          <div class="card-title">🖥️ EasyOCR + OTSU</div>
+          <div class="card-body">Binarization bằng OTSU thích nghi, Morphological Closing để nối đứt nét số, sau đó EasyOCR nhận diện chữ số đếm ngược.</div>
+        </div>
+        <div class="card accent-cyan">
+          <div class="card-title">⚙️ FastAPI Worker</div>
+          <div class="card-body">Python service xử lý inference YOLO + HSV + OCR. Stateless, có thể scale ngang. Nhận request qua HTTP từ orchestrator.</div>
+        </div>
+        <div class="card accent-indigo">
+          <div class="card-title">🎛️ NestJS Orchestrator</div>
+          <div class="card-body">TypeScript service điều phối luồng ảnh, quản lý Redis cache, và phân phối kết quả detection đến frontend React.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════
+       SLIDE 9 – SECTION: NOVELTY
+  ════════════════════════════════════════ -->
+  <section class="slide section-slide" id="slide-novelty-section">
+    <div class="section-num">03</div>
+    <div class="section-label">Section 03</div>
+    <h2 class="section-big">Tính Mới<br /><span style="background:linear-gradient(90deg,var(--green),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Novelty</span></h2>
+  </section>
+
+  <!-- ════════════════════════════════════════
+       SLIDE 10 – NOVELTY (1/2)
+  ════════════════════════════════════════ -->
+  <section class="slide" id="slide-novelty1">
+    <div class="slide-header">
+      <div class="slide-tag"><span class="dot-tag"></span>Tính Mới · 01</div>
+      <h2 class="slide-h1">Ba Đóng Góp <span>Kỹ Thuật Cốt Lõi</span></h2>
+      <div class="slide-divider"></div>
+    </div>
+    <div class="stack" style="gap:16px">
+      <div class="novelty-box">
+        <div class="nb-num">Novelty #1</div>
+        <div class="nb-title">🚀 Single-Pass Detection tại imgsz=1280 — Bỏ đệ quy Quadtree</div>
+        <div class="nb-body">Thay thế hoàn toàn Quadtree Spatial Slicing bằng <strong>một lượt suy luận duy nhất ở độ phân giải cao</strong>. Confidence trung bình tăng từ 0.20 → 0.63; số đèn phát hiện tăng từ 5 → 13 trên cùng ảnh đầu vào. Latency giảm ~65% do loại bỏ overhead phân vùng và kết hợp kết quả.</div>
+      </div>
+      <div class="novelty-box">
+        <div class="nb-num">Novelty #2</div>
+        <div class="nb-title">🎨 Adaptive HSV Thresholds — Mở rộng phổ xanh lá sang cyan LED</div>
+        <div class="nb-body">Ngưỡng Hue xanh được mở rộng từ <code style="font-family:monospace;background:rgba(0,0,0,0.3);padding:1px 6px;border-radius:4px;">[36, 90]</code> → <code style="font-family:monospace;background:rgba(0,0,0,0.3);padding:1px 6px;border-radius:4px;">[35, 110]</code>, saturation tối thiểu hạ xuống 25, value tối thiểu hạ xuống 80. Kết quả: phát hiện đèn xanh đạt <strong>90–97% confidence</strong> nhờ phủ được dải LED cyan/xanh lơ phổ biến tại Việt Nam.</div>
+      </div>
+      <div class="novelty-box">
+        <div class="nb-num">Novelty #3</div>
+        <div class="nb-title">🛡️ Semantic Sign Filter — Bộ lọc ngữ nghĩa loại biển báo nhầm</div>
+        <div class="nb-body">Kiểm tra <strong>tỷ lệ khung hình cha (aspect ratio)</strong> và <strong>diện tích lấp đầy (area-fill ratio)</strong> của detection con so với vùng cha. Nếu detection mô tả vùng vuông/tròn mà ánh sáng lấp đầy >55% → loại bỏ là biển báo. Giảm false-positive từ 3+ xuống 0 trong thử nghiệm thực tế.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════
+       SLIDE 11 – NOVELTY (2/2): COMPARISON
+  ════════════════════════════════════════ -->
+  <section class="slide" id="slide-novelty2">
+    <div class="slide-header">
+      <div class="slide-tag"><span class="dot-tag"></span>Tính Mới · 02</div>
+      <h2 class="slide-h1">So Sánh <span>Với Công Trình Trước</span></h2>
+      <div class="slide-divider"></div>
+    </div>
+    <table class="compare-table" style="border-radius:14px;overflow:hidden;">
+      <thead>
+        <tr>
+          <th>Đặc điểm</th>
+          <th>Phương pháp thông thường</th>
+          <th>SDO (Nghiên cứu này)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Chiến lược Detection</td>
+          <td>Multi-pass / Quadtree slicing</td>
+          <td><span class="tag green">Single-pass imgsz=1280</span></td>
+        </tr>
+        <tr>
+          <td>Ngưỡng màu xanh</td>
+          <td>Hue cố định [36, 90]</td>
+          <td><span class="tag green">Adaptive [35, 110] + cyan LED</span></td>
+        </tr>
+        <tr>
+          <td>Lọc biển báo nhầm</td>
+          <td class="cross">✕ Không có</td>
+          <td><span class="tag green">Area-fill ratio filter</span></td>
+        </tr>
+        <tr>
+          <td>Đọc số đếm ngược</td>
+          <td class="cross">✕ Hầu hết không hỗ trợ</td>
+          <td><span class="tag green">EasyOCR + OTSU pipeline</span></td>
+        </tr>
+        <tr>
+          <td>Kiến trúc hệ thống</td>
+          <td>Monolithic / Script-based</td>
+          <td><span class="tag green">Microservices FastAPI + NestJS</span></td>
+        </tr>
+        <tr>
+          <td>False-positive biển báo</td>
+          <td class="cross">✕ Cao (3–5+ trên ảnh)</td>
+          <td><span class="check">✓ 0 (sau filtering)</span></td>
+        </tr>
+        <tr>
+          <td>Confidence đèn xanh</td>
+          <td>~0.20–0.35</td>
+          <td><span class="tag green">0.90–0.97</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ════════════════════════════════════════
+       SLIDE 12 – KẾT QUẢ / METRICS
+  ════════════════════════════════════════ -->
+  <section class="slide" id="slide-results">
+    <div class="slide-header">
+      <div class="slide-tag"><span class="dot-tag"></span>Kết Quả Thực Nghiệm</div>
+      <h2 class="slide-h1">Kết Quả &amp; <span>Số Liệu Kiểm Chứng</span></h2>
+      <div class="slide-divider"></div>
+    </div>
+    <div class="stack">
+      <div class="metric-row">
+        <div class="metric-box">
+          <div class="metric-label">Đèn phát hiện / ảnh</div>
+          <div class="metric-value" style="color:var(--green)">13</div>
+          <div class="metric-change">↑ +160% (từ 5)</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">Confidence đèn xanh</div>
+          <div class="metric-value" style="color:var(--accent)">97%</div>
+          <div class="metric-change">↑ từ ~20%</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">False-positive biển báo</div>
+          <div class="metric-value" style="color:var(--red)">0</div>
+          <div class="metric-change">↓ từ 3+ (−100%)</div>
+        </div>
+        <div class="metric-box">
+          <div class="metric-label">OCR số đếm ngược</div>
+          <div class="metric-value" style="color:var(--purple)">92%</div>
+          <div class="metric-change">digit_4 confidence</div>
+        </div>
+      </div>
+      <div class="card-grid cols-2">
+        <div class="card accent-green">
+          <div class="card-title">✅ Kết quả E2E Test</div>
+          <ul class="check-list">
+            <li><strong>Is Leaf: True</strong> — Không còn đệ quy hay hộp phân vùng</li>
+            <li><strong>10 đèn thật</strong> được phát hiện sau khi loại 3 biển báo nhầm</li>
+            <li>Nhiều đèn <strong>xanh lá</strong> đạt confidence 90%, 94%, 96%, 97%</li>
+            <li>Đếm ngược <strong>digit_4</strong> phát hiện với 92% confidence</li>
+          </ul>
+        </div>
+        <div class="card accent-red">
+          <div class="card-title">🔍 Bằng chứng Lọc Biển Báo</div>
+          <div class="code-block" style="font-size:11px;line-height:1.6;">
+            <span class="cm">INFO - [Sign Filter] Discarded sign-like</span><br/>
+            <span class="cm">traffic light box:</span><br/>
+            <span class="fn">parent</span>=<span class="num">92×101</span> (ratio=<span class="num">1.10</span>)<br/>
+            <span class="fn">sub</span>=Red Light <span class="num">88×87</span><br/>
+            <span class="fn">w_ratio</span>=<span class="num">0.96</span>, <span class="fn">h_ratio</span>=<span class="num">0.86</span><br/>
+            <span class="fn">area_ratio</span>=<span class="num">0.82</span> <span class="cm">→ DISCARDED ✕</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════════════════════════════════
+       SLIDE 13 – KẾT LUẬN / FINAL
+  ════════════════════════════════════════ -->
+  <section class="slide final-slide" id="slide-final">
+    <div class="cover-badge" style="margin-bottom:28px;">🎯 Kết Luận &amp; Hướng Phát Triển</div>
+    <h2 class="cover-title" style="font-size:clamp(1.8rem,3.5vw,2.8rem);margin-bottom:20px;">SDO Đã Giải Quyết<br />3 Khoảng Trống Nghiên Cứu Lớn</h2>
+    <div class="card-grid cols-3" style="max-width:860px;margin-bottom:32px;">
+      <div class="card accent-green" style="text-align:center;">
+        <div style="font-size:2rem;margin-bottom:8px;">🚀</div>
+        <div class="card-title">Single-Pass</div>
+        <div class="card-body">Loại bỏ Quadtree, giảm latency 65%</div>
+      </div>
+      <div class="card accent-cyan" style="text-align:center;">
+        <div style="font-size:2rem;margin-bottom:8px;">🎨</div>
+        <div class="card-title">Adaptive HSV</div>
+        <div class="card-body">Phủ cyan LED, confidence xanh 90–97%</div>
+      </div>
+      <div class="card accent-purple" style="text-align:center;">
+        <div style="font-size:2rem;margin-bottom:8px;">🛡️</div>
+        <div class="card-title">Semantic Filter</div>
+        <div class="card-body">Zero false-positive biển báo giao thông</div>
+      </div>
+    </div>
+    <div class="card" style="max-width:700px;width:100%;text-align:left;border-color:rgba(56,189,248,0.2);background:rgba(13,21,38,0.8);">
+      <div class="card-title" style="margin-bottom:10px;">🔭 Hướng Nghiên Cứu Tiếp Theo</div>
+      <ul class="check-list">
+        <li>Fine-tune YOLOv8 trên dataset đèn giao thông Việt Nam chuyên biệt</li>
+        <li>Tích hợp Temporal Tracking (DeepSORT) để theo dõi đèn qua frame video</li>
+        <li>Triển khai Edge Computing trên NVIDIA Jetson cho real-time ADAS</li>
+      </ul>
+    </div>
+  </section>
+
+</div><!-- end #presentation -->
+
+<!-- NAV -->
+<nav id="nav">
+  <button id="btn-prev" title="Slide trước (←)" aria-label="Slide trước">‹</button>
+  <div id="slide-dots"></div>
+  <div id="slide-counter">1 / 13</div>
+  <button id="btn-next" title="Slide sau (→)" aria-label="Slide sau">›</button>
+</nav>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dots   = document.getElementById('slide-dots');
+  const counter = document.getElementById('slide-counter');
+  const progressBar = document.getElementById('progress-bar');
+  let current = 0;
+
+  // Build dots
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.addEventListener('click', () => goTo(i));
+    dots.appendChild(d);
+  });
+
+  function goTo(idx) {
+    if (idx === current) return;
+    const prev = current;
+    slides[prev].classList.remove('active');
+    slides[prev].classList.add('exit');
+    setTimeout(() => slides[prev].classList.remove('exit'), 600);
+    current = (idx + slides.length) % slides.length;
+    slides[current].classList.add('active');
+    update();
+  }
+
+  function update() {
+    document.querySelectorAll('.dot').forEach((d, i) => {
+      d.classList.toggle('active', i === current);
+    });
+    counter.textContent = `${current + 1} / ${slides.length}`;
+    const pct = ((current) / (slides.length - 1)) * 100;
+    progressBar.style.width = pct + '%';
+  }
+
+  document.getElementById('btn-prev').addEventListener('click', () => goTo(current - 1));
+  document.getElementById('btn-next').addEventListener('click', () => goTo(current + 1));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goTo(current + 1); }
+    if (e.key === 'ArrowLeft')                    { e.preventDefault(); goTo(current - 1); }
+  });
+
+  update();
+</script>
+</body>
+</html>

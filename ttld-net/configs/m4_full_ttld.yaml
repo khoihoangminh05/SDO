@@ -1,0 +1,44 @@
+# M4 — Full TTLD-Net (all components)
+
+model:
+  backbone: yolo26
+  neck: fpn_panet
+  mode: full
+  use_shallow_features: true
+  use_soft_nms: true
+  heads:
+    - tiny_generator
+    - implicit_topo_sampler
+    - verification_mlp
+
+training:
+  epochs: 100
+  batch_size: 32
+  optimizer: AdamW
+  lr: 1.0e-4
+  scheduler: CosineAnnealing
+  warmup_epochs: 5
+  grad_clip_norm: 1.0
+
+loss:
+  lambda1: 1.0
+  lambda2: 1.0
+  focal_gamma: 1.5
+  focal_alpha: 0.75
+  infonce_temperature: 0.07
+  n_hard_negatives: 32
+
+data:
+  ultralytics_yaml: ../apps/worker/datasets/bstld.yaml
+  train_yaml: ../apps/worker/datasets/dataset_train_rgb/train.yaml
+  val_yaml: ../apps/worker/datasets/dataset_val_sample/val.yaml
+  conf_threshold: 0.05
+  eval_conf_threshold: 0.5
+  soft_nms_sigma: 0.5
+  num_workers: 4
+  pin_memory: true
+
+topology:
+  n_points: 4
+  n_heads: 8
+  d_model: 256

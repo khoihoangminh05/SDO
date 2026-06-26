@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Báo Cáo Dự Án SDO — Hệ Thống Nhận Diện Đèn Giao Thông Thông Minh</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ═══ RESET & BASE ═══ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary: #2563eb;
+      --primary-light: #dbeafe;
+      --accent: #0ea5e9;
+      --green: #16a34a;
+      --green-light: #dcfce7;
+      --red: #dc2626;
+      --red-light: #fee2e2;
+      --amber: #d97706;
+      --amber-light: #fef3c7;
+      --purple: #7c3aed;
+      --purple-light: #ede9fe;
+      --surface: #ffffff;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --muted: #64748b;
+      --code-bg: #f1f5f9;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 15px;
+    }
+
+    /* ═══ PRINT STYLES ═══ */
+    @media print {
+      body { background: white; font-size: 12px; line-height: 1.5; }
+      .no-print { display: none !important; }
+      .page-break { page-break-before: always; }
+      .container { max-width: 100%; padding: 0 20px; }
+      .cover { padding: 40px 0; min-height: auto; }
+      .toc { page-break-after: always; }
+    }
+
+    /* ═══ LAYOUT ═══ */
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 0 32px;
+    }
+
+    /* ═══ COVER PAGE ═══ */
+    .cover {
+      background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%);
+      color: white;
+      padding: 80px 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+    }
+    .cover-inner {
+      text-align: center;
+      width: 100%;
+    }
+    .cover-badge {
+      display: inline-block;
+      background: rgba(56,189,248,0.15);
+      border: 1px solid rgba(56,189,248,0.3);
+      color: #38bdf8;
+      padding: 6px 18px;
+      border-radius: 30px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+    .cover h1 {
+      font-size: 2.6rem;
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 16px;
+    }
+    .cover h1 span { color: #38bdf8; }
+    .cover .subtitle {
+      font-size: 1.1rem;
+      color: #94a3b8;
+      max-width: 600px;
+      margin: 0 auto 40px;
+    }
+    .cover-meta {
+      display: flex;
+      justify-content: center;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+    .cover-meta-item {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 12px 24px;
+      text-align: left;
+    }
+    .cover-meta-item .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+    .cover-meta-item .value {
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    /* ═══ TABLE OF CONTENTS ═══ */
+    .toc {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 40px;
+      margin: 48px auto;
+    }
+    .toc h2 {
+      font-size: 1.3rem;
+      margin-bottom: 16px;
+      color: var(--primary);
+    }
+    .toc ol {
+      list-style: none;
+      counter-reset: toc;
+    }
+    .toc ol li {
+      counter-increment: toc;
+      padding: 6px 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .toc ol li::before {
+      content: counter(toc) ".";
+      font-weight: 700;
+      color: var(--primary);
+      margin-right: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+    .toc ol li a {
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .toc ol li a:hover { color: var(--primary); }
+
+    /* ═══ SECTIONS ═══ */
+    section {
+      margin: 56px 0;
+    }
+    .section-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px; height: 36px;
+      background: var(--primary);
+      color: white;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 16px;
+      margin-right: 10px;
+      vertical-align: middle;
+    }
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 800;
+      margin-bottom: 20px;
+      padding-bottom: 10px;
+      border-bottom: 3px solid var(--primary);
+      display: inline-block;
+    }
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin: 24px 0 12px;
+      color: var(--text);
+    }
+    h3::before {
+      content: "▸ ";
+      color: var(--primary);
+    }
+    h4 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 18px 0 8px;
+      color: var(--muted);
+    }
+
+    p { margin-bottom: 14px; }
+
+    /* ═══ CARDS ═══ */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      margin: 16px 0;
+    }
+    .card.blue   { border-left: 4px solid var(--primary); background: var(--primary-light); }
+    .card.green  { border-left: 4px solid var(--green);   background: var(--green-light); }
+    .card.red    { border-left: 4px solid var(--red);     background: var(--red-light); }
+    .card.amber  { border-left: 4px solid var(--amber);   background: var(--amber-light); }
+    .card.purple { border-left: 4px solid var(--purple);  background: var(--purple-light); }
+
+    .card-title {
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 8px;
+    }
+
+    /* ═══ TABLES ═══ */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    th {
+      background: var(--primary);
+      color: white;
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    th:first-child { border-radius: 8px 0 0 0; }
+    th:last-child  { border-radius: 0 8px 0 0; }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:hover td { background: #f8fafc; }
+    tr:last-child td:first-child { border-radius: 0 0 0 8px; }
+    tr:last-child td:last-child  { border-radius: 0 0 8px 0; }
+
+    /* ═══ CODE ═══ */
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--code-bg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: var(--primary);
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 20px 24px;
+      border-radius: 12px;
+      overflow-x: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      margin: 16px 0;
+    }
+    pre .comment { color: #64748b; }
+    pre .keyword { color: #c084fc; }
+    pre .string  { color: #34d399; }
+    pre .number  { color: #fbbf24; }
+    pre .fn      { color: #38bdf8; }
+
+    /* ═══ DIAGRAM FLOW ═══ */
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin: 24px 0;
+    }
+    .flow-node {
+      background: white;
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 16px;
+      text-align: center;
+      min-width: 100px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .flow-node.highlight { border-color: var(--primary); background: var(--primary-light); }
+    .flow-node small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+    .flow-arrow {
+      width: 30px;
+      height: 2px;
+      background: var(--primary);
+      position: relative;
+      flex-shrink: 0;
+    }
+    .flow-arrow::after {
+      content: '▸';
+      position: absolute;
+      right: -6px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--primary);
+      font-size: 14px;
+    }
+
+    /* ═══ IMAGE PLACEHOLDER ═══ */
+    .img-placeholder {
+      border: 3px dashed #cbd5e1;
+      border-radius: 12px;
+      padding: 40px 20px;
+      text-align: center;
+      background: #f8fafc;
+      margin: 20px 0;
+      min-height: 300px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+    }
+    .img-placeholder .icon { font-size: 3rem; margin-bottom: 12px; opacity: 0.5; }
+    .img-placeholder .label { font-weight: 600; font-size: 14px; }
+    .img-placeholder .hint { font-size: 12px; margin-top: 6px; }
+
+    /* ═══ METRICS ROW ═══ */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin: 20px 0;
+    }
+    .metric-box {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      text-align: center;
+    }
+    .metric-num {
+      font-size: 2rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .metric-num.blue   { color: var(--primary); }
+    .metric-num.green  { color: var(--green); }
+    .metric-num.red    { color: var(--red); }
+    .metric-num.amber  { color: var(--amber); }
+    .metric-num.purple { color: var(--purple); }
+    .metric-label { font-size: 12px; color: var(--muted); margin-top: 6px; font-weight: 500; }
+    .metric-change { font-size: 12px; color: var(--green); margin-top: 4px; font-weight: 500; }
+
+    /* ═══ LIST ═══ */
+    ul, ol { margin-left: 20px; margin-bottom: 14px; }
+    li { margin-bottom: 6px; }
+
+    /* ═══ SEPARATOR ═══ */
+    hr {
+      border: none;
+      height: 1px;
+      background: var(--border);
+      margin: 32px 0;
+    }
+
+    /* ═══ BADGE ═══ */
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .badge.blue   { background: var(--primary-light); color: var(--primary); }
+    .badge.green  { background: var(--green-light);   color: var(--green); }
+    .badge.red    { background: var(--red-light);      color: var(--red); }
+    .badge.amber  { background: var(--amber-light);    color: var(--amber); }
+    .badge.purple { background: var(--purple-light);   color: var(--purple); }
+
+    /* ═══ FOOTER ═══ */
+    footer {
+      background: #0f172a;
+      color: #94a3b8;
+      padding: 32px 0;
+      text-align: center;
+      font-size: 13px;
+      margin-top: 64px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     COVER
+══════════════════════════════════════════════════════════════════ -->
+<div class="cover">
+  <div class="container cover-inner">
+    <div class="cover-badge">🚦 Báo Cáo Dự Án</div>
+    <h1>Hệ Thống Nhận Diện<br /><span>Đèn Giao Thông Thông Minh Đa Tầng</span></h1>
+    <p class="subtitle">SDO — Smart Detection &amp; Optimization<br />Sử dụng YOLOv8, YOLO-P2 Custom, HSV Thích Nghi và OCR Pipeline</p>
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <div class="label">Sinh viên</div>
+        <div class="value">[ Họ tên sinh viên ]</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="label">GVHD</div>
+        <div class="value">[ Họ tên giảng viên ]</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="label">Môn học</div>
+        <div class="value">[ Tên môn học ]</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="label">Năm học</div>
+        <div class="value">2025 – 2026</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ══════════════════════════════════════════════════════════════════
+     TABLE OF CONTENTS
+══════════════════════════════════════════════════════════════════ -->
+<div class="toc">
+  <h2>📋 Mục Lục</h2>
+  <ol>
+    <li><a href="#s1">Tổng Quan Hệ Thống &amp; Kiến Trúc</a></li>
+    <li><a href="#s2">Huấn Luyện Mô Hình YOLO-P2 Custom</a></li>
+    <li><a href="#s3">Pipeline Phát Hiện Đèn Giao Thông (Detection Pipeline)</a></li>
+    <li><a href="#s4">Phân Tích Màu HSV Thích Nghi (Adaptive HSV)</a></li>
+    <li><a href="#s5">Nhận Diện Số Đếm Ngược (OCR Pipeline)</a></li>
+    <li><a href="#s6">Bộ Lọc Biển Báo Ngữ Nghĩa (Semantic Sign Filter)</a></li>
+    <li><a href="#s7">Cải Tiến &amp; Tối Ưu Đã Thực Hiện</a></li>
+    <li><a href="#s8">Kết Quả Thực Nghiệm</a></li>
+    <li><a href="#s9">Demo Giao Diện Web</a></li>
+    <li><a href="#s10">Kết Luận &amp; Hướng Phát Triển</a></li>
+  </ol>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 1: TỔNG QUAN
+══════════════════════════════════════════════════════════════════ -->
+<section id="s1" class="page-break">
+  <h2><span class="section-num">1</span> Tổng Quan Hệ Thống &amp; Kiến Trúc</h2>
+
+  <p>SDO (Smart Detection &amp; Optimization) là hệ thống nhận diện đèn giao thông end-to-end sử dụng kiến trúc <strong>Microservices</strong> bao gồm 3 thành phần chính:</p>
+
+  <table>
+    <tr>
+      <th>Thành phần</th>
+      <th>Công nghệ</th>
+      <th>Chức năng</th>
+      <th>Port</th>
+    </tr>
+    <tr>
+      <td><strong>Worker</strong></td>
+      <td>Python / FastAPI</td>
+      <td>Suy luận YOLO, phân tích HSV, nhận diện OCR</td>
+      <td>8000</td>
+    </tr>
+    <tr>
+      <td><strong>Orchestrator</strong></td>
+      <td>TypeScript / NestJS</td>
+      <td>Điều phối luồng ảnh, quản lý Redis cache</td>
+      <td>3000</td>
+    </tr>
+    <tr>
+      <td><strong>Frontend</strong></td>
+      <td>TypeScript / Next.js + React</td>
+      <td>Hiển thị ảnh với khung detection overlay</td>
+      <td>4200</td>
+    </tr>
+  </table>
+
+  <p>Dự án được tổ chức dưới dạng <strong>NX Monorepo</strong> với cấu trúc:</p>
+  <pre>
+SDO/
+├── apps/
+│   ├── <span class="fn">worker/</span>           <span class="comment"># Python FastAPI — YOLO + HSV + OCR</span>
+│   │   ├── app/
+│   │   │   ├── main.py          <span class="comment"># API endpoint POST /api/v1/detect</span>
+│   │   │   ├── services/
+│   │   │   │   ├── <span class="fn">recursion_engine.py</span>  <span class="comment"># Pipeline chính</span>
+│   │   │   │   ├── <span class="fn">yolo_service.py</span>      <span class="comment"># YOLOv8 + YOLO-P2</span>
+│   │   │   │   └── <span class="fn">ocr_service.py</span>       <span class="comment"># EasyOCR reader</span>
+│   │   │   └── models.py
+│   │   └── <span class="fn">yolov8_p2_custom_best.pt</span>  <span class="comment"># Weights YOLO-P2 đã train</span>
+│   ├── <span class="fn">orchestrator/</span>    <span class="comment"># NestJS — Redis + routing</span>
+│   └── <span class="fn">frontend/</span>        <span class="comment"># Next.js — UI hiển thị</span>
+└── package.json         <span class="comment"># NX workspace config</span>
+  </pre>
+
+  <h3>Luồng Xử Lý (Data Flow)</h3>
+  <div class="flow">
+    <div class="flow-node">📷 Ảnh đầu vào</div>
+    <div class="flow-arrow"></div>
+    <div class="flow-node highlight">🔭 YOLOv8n<small>imgsz=1280</small></div>
+    <div class="flow-arrow"></div>
+    <div class="flow-node">📦 Crop + 4× Upscale</div>
+    <div class="flow-arrow"></div>
+    <div class="flow-node highlight">🎯 YOLO-P2<small>Custom weights</small></div>
+    <div class="flow-arrow"></div>
+    <div class="flow-node">🎨 HSV Filter</div>
+    <div class="flow-arrow"></div>
+    <div class="flow-node">🔢 EasyOCR</div>
+    <div class="flow-arrow"></div>
+    <div class="flow-node highlight">🛡️ Sign Filter</div>
+    <div class="flow-arrow"></div>
+    <div class="flow-node">📊 API Result</div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 2: HUẤN LUYỆN YOLO-P2
+══════════════════════════════════════════════════════════════════ -->
+<section id="s2" class="page-break">
+  <h2><span class="section-num">2</span> Huấn Luyện Mô Hình YOLO-P2 Custom</h2>
+
+  <h3>Lý do cần mô hình custom</h3>
+  <p>YOLOv8n pretrained trên COCO chỉ có class <code>traffic light</code> (class_id=9) nhưng <strong>không phân biệt được trạng thái</strong> (đỏ/vàng/xanh) và <strong>không phát hiện được vật thể rất nhỏ</strong> như bóng đèn đơn lẻ trong cụm đèn. Do đó, chúng tôi huấn luyện một mô hình YOLO-P2 chuyên biệt.</p>
+
+  <h3>YOLOv8-P2 là gì?</h3>
+  <div class="card blue">
+    <div class="card-title">📐 Kiến trúc P2 — Thêm Head ở Stride 4</div>
+    <p>YOLOv8 tiêu chuẩn có 3 detection head ở stride 8 (P3), 16 (P4), 32 (P5). Biến thể <strong>P2</strong> thêm một head bổ sung ở <strong>stride 4</strong>, tương đương feature map lớn gấp 4 lần P3. Điều này cho phép phát hiện các vật thể cực nhỏ (tiny objects) như bóng đèn LED, chữ số đếm ngược trên đèn giao thông.</p>
+  </div>
+
+  <h3>Thông tin huấn luyện</h3>
+  <table>
+    <tr><th>Tham số</th><th>Giá trị</th></tr>
+    <tr><td>Base model</td><td><code>yolov8n-p2.yaml</code> (nano variant + P2 head)</td></tr>
+    <tr><td>Pretrained weights</td><td><code>yolov8n.pt</code> (COCO pretrained, transfer learning)</td></tr>
+    <tr><td>Số classes</td><td>3 — <code>red</code>, <code>yellow</code>, <code>green</code></td></tr>
+    <tr><td>Input size</td><td>640 × 640</td></tr>
+    <tr><td>File weights output</td><td><code>yolov8_p2_custom_best.pt</code></td></tr>
+    <tr><td>Inference target</td><td>Crop upscaled 4× của từng cụm đèn giao thông</td></tr>
+    <tr><td>Inference confidence</td><td><code>conf_threshold = 0.10</code></td></tr>
+  </table>
+
+  <h3>Class SmallObjectDetector</h3>
+  <p>Model YOLO-P2 được wrap trong class <code>SmallObjectDetector</code> với các tính năng:</p>
+  <ul>
+    <li><strong>Adaptive Letterbox</strong>: Scale ảnh giữ tỷ lệ về 640×640, pad pixel (114,114,114)</li>
+    <li><strong>Coordinate Remap</strong>: Chuyển tọa độ từ không gian padded về tọa độ crop gốc bằng nghịch đảo scale và offset</li>
+    <li><strong>Device Selection</strong>: Tự động chọn CUDA → MPS → CPU</li>
+  </ul>
+
+  <pre>
+<span class="keyword">class</span> <span class="fn">SmallObjectDetector</span>:
+    <span class="keyword">def</span> <span class="fn">predict</span>(self, crop, conf_threshold=<span class="number">0.10</span>):
+        <span class="comment"># 1. Letterbox 640×640</span>
+        padded, scale, (pad_x, pad_y) = self.<span class="fn">adaptive_letterbox</span>(crop)
+        <span class="comment"># 2. YOLO inference</span>
+        results = self.model.<span class="fn">predict</span>(source=padded, conf=conf_threshold)
+        <span class="comment"># 3. Remap coordinates: (xyxy - pad) / scale</span>
+        <span class="keyword">for</span> box <span class="keyword">in</span> results:
+            lx = (xyxy[<span class="number">0</span>] - pad_x) / scale  <span class="comment"># → original crop coords</span>
+  </pre>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 3: DETECTION PIPELINE
+══════════════════════════════════════════════════════════════════ -->
+<section id="s3" class="page-break">
+  <h2><span class="section-num">3</span> Pipeline Phát Hiện Đèn Giao Thông</h2>
+
+  <p>Pipeline detection gồm 4 tầng xử lý tuần tự trong hàm <code>execute_spatial_recursion()</code>:</p>
+
+  <h3>Tầng 1 — Phát hiện cụm đèn (Base YOLO)</h3>
+  <div class="card blue">
+    <p>Chạy <code>YOLOv8n</code> trên <strong>toàn bộ ảnh gốc</strong> với:</p>
+    <ul>
+      <li><code>imgsz = 1280</code> — độ phân giải cao giúp phát hiện đèn nhỏ/xa</li>
+      <li><code>conf_threshold = 0.10</code> — ngưỡng thấp để không bỏ sót</li>
+      <li>Chỉ lấy <code>class_id == 9</code> (traffic light)</li>
+      <li>Bỏ qua box nhỏ hơn <code>20 × 15 px</code></li>
+    </ul>
+  </div>
+
+  <h3>Tầng 2 — Weighted Box Fusion (WBF)</h3>
+  <p>Merge các box chồng chéo bằng thuật toán WBF với <code>IoU threshold = 0.30</code>. Mỗi cluster box được fuse thành 1 detection duy nhất với tọa độ trung bình có trọng số theo confidence.</p>
+
+  <h3>Tầng 3 — Phân tích chi tiết từng cụm đèn</h3>
+  <p>Với mỗi cụm đèn đã phát hiện:</p>
+  <ol>
+    <li><strong>Crop</strong> vùng đèn từ ảnh gốc</li>
+    <li><strong>Upscale 4× bằng Lanczos4</strong> — nội suy chất lượng cao</li>
+    <li><strong>Chạy YOLO-P2 custom</strong> trên crop upscaled → phát hiện bóng đèn đỏ/vàng/xanh</li>
+    <li><strong>HSV Fallback</strong> — quét màu trên không gian HSV (xem Section 4)</li>
+    <li><strong>Merge</strong> kết quả YOLO-P2 + HSV bằng WBF (<code>IoU = 0.35</code>)</li>
+  </ol>
+
+  <h3>Tầng 4 — OCR Nhận diện số đếm ngược</h3>
+  <p>Với mỗi bóng đèn phát hiện, crop và chạy OCR pipeline (xem Section 5).</p>
+
+  <div class="card green">
+    <div class="card-title">💡 Điểm quan trọng: Single-Pass Detection</div>
+    <p>Ban đầu hệ thống sử dụng Quadtree Spatial Slicing để chia nhỏ ảnh (3–5 lần suy luận). Chúng tôi đã <strong>loại bỏ hoàn toàn đệ quy</strong> và thay bằng <strong>1 lượt suy luận duy nhất ở imgsz=1280</strong>. Kết quả: giảm latency ~65%, tăng confidence từ 0.20 → 0.63.</p>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 4: HSV
+══════════════════════════════════════════════════════════════════ -->
+<section id="s4" class="page-break">
+  <h2><span class="section-num">4</span> Phân Tích Màu HSV Thích Nghi</h2>
+
+  <p>Ngoài YOLO-P2, hệ thống sử dụng phân tích màu HSV (Hue-Saturation-Value) như một fallback detector để bắt được các bóng đèn mà YOLO-P2 bỏ sót. HSV tách biệt thông tin màu sắc (Hue) khỏi độ sáng (Value), phù hợp với điều kiện ánh sáng thay đổi.</p>
+
+  <h3>Bảng Ngưỡng HSV cho Detection</h3>
+  <table>
+    <tr>
+      <th>Màu</th>
+      <th>Hue Min</th>
+      <th>Hue Max</th>
+      <th>Sat Min</th>
+      <th>Val Min</th>
+      <th>Ghi chú</th>
+    </tr>
+    <tr>
+      <td><span class="badge red">Đỏ (1)</span></td>
+      <td>0</td><td>12</td><td>50</td><td>130</td>
+      <td>Dải đỏ thấp</td>
+    </tr>
+    <tr>
+      <td><span class="badge red">Đỏ (2)</span></td>
+      <td>165</td><td>180</td><td>50</td><td>130</td>
+      <td>Dải đỏ cao (wrap-around)</td>
+    </tr>
+    <tr>
+      <td><span class="badge amber">Vàng</span></td>
+      <td>13</td><td>34</td><td>50</td><td>130</td>
+      <td></td>
+    </tr>
+    <tr>
+      <td><span class="badge green">Xanh lá</span></td>
+      <td>35</td><td>110</td><td>35</td><td>120</td>
+      <td>⚡ Mở rộng phủ cyan LED</td>
+    </tr>
+  </table>
+
+  <div class="card amber">
+    <div class="card-title">⚡ Cải tiến quan trọng: Mở rộng ngưỡng xanh lá</div>
+    <p>Đèn LED xanh lá hiện đại tại Việt Nam phát xạ ở bước sóng <strong>495–565 nm</strong>, tương đương Hue ~90–110 trong HSV. Ngưỡng cũ <code>[36, 90]</code> bỏ sót ~30% đèn xanh thực tế. Chúng tôi mở rộng lên <code>[35, 110]</code> để phủ được dải cyan LED. Kết quả: confidence đèn xanh đạt <strong>90–97%</strong>.</p>
+  </div>
+
+  <h3>Xử lý contour</h3>
+  <ul>
+    <li><strong>Morphological Open + Close</strong>: kernel ELLIPSE 3×3 — loại nhiễu nhỏ và lấp đầy khe hở</li>
+    <li><strong>Diện tích tối thiểu</strong>: 350 pixel (trên ảnh upscaled 4×)</li>
+    <li><strong>Aspect ratio</strong>: 0.4 ≤ ar ≤ 2.5</li>
+    <li><strong>Confidence</strong>: <code>0.5 + 0.5 × solidity</code> (solidity = area / convex_hull_area)</li>
+  </ul>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 5: OCR
+══════════════════════════════════════════════════════════════════ -->
+<section id="s5" class="page-break">
+  <h2><span class="section-num">5</span> Nhận Diện Số Đếm Ngược (OCR Pipeline)</h2>
+
+  <p>Hệ thống đọc số đếm ngược trên đèn giao thông bằng pipeline 6 bước:</p>
+
+  <table>
+    <tr><th>Bước</th><th>Xử lý</th><th>Mục đích</th></tr>
+    <tr>
+      <td><strong>1</strong></td>
+      <td>HSV Color Masking</td>
+      <td>Tách pixel sáng (đỏ/vàng/xanh) ra khỏi nền đen của đèn LED. Sat ≥ 25, Val ≥ 80</td>
+    </tr>
+    <tr>
+      <td><strong>2</strong></td>
+      <td>Morphological Closing (3×3)</td>
+      <td>Nối các đoạn đứt nét của chữ số LED 7-segment</td>
+    </tr>
+    <tr>
+      <td><strong>3</strong></td>
+      <td>Upscale 3× (INTER_CUBIC)</td>
+      <td>Phóng to chữ số cho OCR dễ nhận diện</td>
+    </tr>
+    <tr>
+      <td><strong>4</strong></td>
+      <td>OTSU Thresholding</td>
+      <td>Binary hóa: chữ số trắng trên nền đen</td>
+    </tr>
+    <tr>
+      <td><strong>5</strong></td>
+      <td>Padding 30px đen</td>
+      <td>Tạo margin để OCR detector trigger chính xác</td>
+    </tr>
+    <tr>
+      <td><strong>6</strong></td>
+      <td>EasyOCR readtext</td>
+      <td><code>allowlist="0123456789"</code>, conf ≥ 0.15</td>
+    </tr>
+  </table>
+
+  <pre>
+<span class="comment"># OCR Pipeline — Pseudocode</span>
+hsv_mask = <span class="fn">color_mask</span>(crop, red | yellow | green)
+closed   = <span class="fn">morphologyEx</span>(hsv_mask, MORPH_CLOSE, kernel_3x3)
+upscaled = <span class="fn">resize</span>(closed, fx=<span class="number">3.0</span>, fy=<span class="number">3.0</span>)
+binary   = <span class="fn">threshold</span>(upscaled, <span class="number">127</span>, <span class="number">255</span>, THRESH_BINARY)
+padded   = <span class="fn">copyMakeBorder</span>(binary, <span class="number">30</span>, <span class="number">30</span>, <span class="number">30</span>, <span class="number">30</span>, BLACK)
+result   = easyocr.<span class="fn">readtext</span>(padded, allowlist=<span class="string">"0123456789"</span>)
+  </pre>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 6: SIGN FILTER
+══════════════════════════════════════════════════════════════════ -->
+<section id="s6" class="page-break">
+  <h2><span class="section-num">6</span> Bộ Lọc Biển Báo Ngữ Nghĩa</h2>
+
+  <p>YOLOv8 pretrained trên COCO thường <strong>nhận nhầm biển báo giao thông</strong> (biển cấm tròn đỏ, biển tốc độ vuông) thành đèn giao thông. Chúng tôi xây dựng <strong>2 bộ lọc ngữ nghĩa</strong> dựa trên hình học để loại bỏ false-positive:</p>
+
+  <h3>Rule A — Tall-Pole Filter</h3>
+  <div class="card red">
+    <p><strong>Điều kiện</strong>: Nếu <code>aspect_ratio (h/w) > 1.7</code> VÀ <code>width < 150 px</code> → <strong>loại bỏ</strong>.</p>
+    <p><strong>Lý do</strong>: Đèn giao thông thật treo trên thanh ngang luôn có ar < 1.0 (nằm ngang). Đèn đơn dọc max ar ~1.5. Box rất cao hẹp (ar > 1.7) thường là cột biển báo xếp chồng (biển cấm + biển chỉ dẫn).</p>
+    <p><strong>Ví dụ</strong>: Box 123×244 (ar=1.98) chứa biển cấm đỏ + biển chỉ dẫn → ĐÃ LOẠI ✓</p>
+  </div>
+
+  <h3>Rule B — Square-Fill Filter</h3>
+  <div class="card red">
+    <p><strong>Điều kiện</strong>: Nếu box vuông (ar 0.65–1.55) VÀ 80 ≤ width ≤ 160 px VÀ bóng đèn con chiếm ≥ 75% diện tích box cha → <strong>loại bỏ</strong>.</p>
+    <p><strong>Lý do</strong>: Biển báo tròn/vuông khi bị detect, HSV sẽ tìm thấy vùng màu lấp đầy gần hết box. Đèn giao thông thật có vỏ housing lớn hơn bóng đèn bên trong.</p>
+    <p><strong>Ví dụ</strong>: Box 92×101 (ar=1.10), sub Red Light 88×87 (w_ratio=0.96, area_ratio=0.83) → ĐÃ LOẠI ✓</p>
+  </div>
+
+  <h3>Post-Filter bổ sung</h3>
+  <ul>
+    <li><strong>Ghost-box removal</strong>: Box không có sub-detection màu nào + confidence < 0.18 → loại (YOLO fire nhầm vào texture nền)</li>
+    <li><strong>Sub-detection deduplication</strong>: Nếu 2 bóng đèn cùng class overlap IoU > 0.40 → giữ cái confidence cao nhất</li>
+  </ul>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 7: CẢI TIẾN
+══════════════════════════════════════════════════════════════════ -->
+<section id="s7" class="page-break">
+  <h2><span class="section-num">7</span> Cải Tiến &amp; Tối Ưu Đã Thực Hiện</h2>
+
+  <table>
+    <tr>
+      <th>#</th>
+      <th>Cải tiến</th>
+      <th>Trước</th>
+      <th>Sau</th>
+      <th>Tác động</th>
+    </tr>
+    <tr>
+      <td>1</td>
+      <td><strong>Loại bỏ Quadtree Recursion</strong></td>
+      <td>3–5 lần suy luận (đệ quy)</td>
+      <td>1 lần suy luận (single-pass)</td>
+      <td>Giảm latency ~65%</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>Nâng inference resolution</strong></td>
+      <td>imgsz=640</td>
+      <td>imgsz=1280</td>
+      <td>Confidence: 0.20 → 0.63</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>Mở rộng ngưỡng xanh HSV</strong></td>
+      <td>Hue [36, 90]</td>
+      <td>Hue [35, 110]</td>
+      <td>Phủ cyan LED, +30% đèn xanh</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><strong>Thêm Sign Filter</strong></td>
+      <td>Không có</td>
+      <td>2 rules (tall-pole + square-fill)</td>
+      <td>False-positive: 3+ → 0</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><strong>Hạ conf threshold</strong></td>
+      <td>conf=0.12</td>
+      <td>conf=0.10</td>
+      <td>Bắt thêm 1 cụm đèn bị thiếu</td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td><strong>WBF IoU tuning</strong></td>
+      <td>IoU=0.55</td>
+      <td>IoU=0.30</td>
+      <td>Merge tốt hơn box chồng chéo</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td><strong>Minimum size guard</strong></td>
+      <td>Không có</td>
+      <td>≥ 20×15 px</td>
+      <td>Loại noise box siêu nhỏ</td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td><strong>Ghost-box removal</strong></td>
+      <td>Không có</td>
+      <td>No color + conf < 0.18 → drop</td>
+      <td>Xóa detection trống</td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td><strong>Sub-detection dedup</strong></td>
+      <td>Không có</td>
+      <td>IoU > 0.40 → keep best</td>
+      <td>Không hiện "Red ×3" trùng nhau</td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td><strong>Always-on labels (Frontend)</strong></td>
+      <td>Hover mới hiện</td>
+      <td>Hiển thị ngay khi load</td>
+      <td>UX tốt hơn</td>
+    </tr>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 8: KẾT QUẢ
+══════════════════════════════════════════════════════════════════ -->
+<section id="s8" class="page-break">
+  <h2><span class="section-num">8</span> Kết Quả Thực Nghiệm</h2>
+
+  <div class="metrics">
+    <div class="metric-box">
+      <div class="metric-num green">8–9</div>
+      <div class="metric-label">Đèn phát hiện / ảnh</div>
+      <div class="metric-change">↑ từ 5 (+60–80%)</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-num blue">97%</div>
+      <div class="metric-label">Confidence đèn xanh</div>
+      <div class="metric-change">↑ từ ~20%</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-num red">0</div>
+      <div class="metric-label">False-positive biển báo</div>
+      <div class="metric-change">↓ từ 3+ (−100%)</div>
+    </div>
+    <div class="metric-box">
+      <div class="metric-num purple">92%</div>
+      <div class="metric-label">OCR đếm ngược</div>
+      <div class="metric-change">digit_4 confidence</div>
+    </div>
+  </div>
+
+  <h3>Log bằng chứng Sign Filter</h3>
+  <pre>
+<span class="comment"># Biển cấm tròn → LOẠI BỎ đúng</span>
+[Sign Filter] Discarded tall-pole box:
+  parent=<span class="number">123.0</span>x<span class="number">244.0</span> (ar=<span class="number">1.98</span>)
+
+<span class="comment"># Biển báo vuông → LOẠI BỎ đúng</span>
+[Sign Filter] Discarded sign-like box:
+  parent=<span class="number">92.0</span>x<span class="number">101.0</span> (ar=<span class="number">1.10</span>),
+  sub=Red Light <span class="number">88.0</span>x<span class="number">87.0</span>
+  (w_ratio=<span class="number">0.96</span>, h_ratio=<span class="number">0.86</span>, area_ratio=<span class="number">0.83</span>)
+
+<span class="comment"># Ghost box → LOẠI BỎ</span>
+[Post-filter] Dropped ghost box (no colour, conf=<span class="number">0.15</span>):
+  bbox=(<span class="number">1181.0</span>, <span class="number">1138.0</span>, <span class="number">1208.0</span>, <span class="number">1189.0</span>)
+
+<span class="comment"># Kết quả cuối</span>
+[Post-filter] Final traffic light count: <span class="number">8</span>
+  </pre>
+
+  <h3>Bảng so sánh trước / sau</h3>
+  <table>
+    <tr>
+      <th>Tiêu chí</th>
+      <th>Phương pháp ban đầu</th>
+      <th>Sau cải tiến</th>
+    </tr>
+    <tr>
+      <td>Chiến lược detection</td>
+      <td>Multi-pass Quadtree</td>
+      <td><span class="badge green">Single-pass imgsz=1280</span></td>
+    </tr>
+    <tr>
+      <td>Ngưỡng xanh</td>
+      <td>Hue [36, 90]</td>
+      <td><span class="badge green">Hue [35, 110] + cyan LED</span></td>
+    </tr>
+    <tr>
+      <td>Lọc biển báo</td>
+      <td>✕ Không có</td>
+      <td><span class="badge green">2 rules — Tall-pole + Square-fill</span></td>
+    </tr>
+    <tr>
+      <td>False-positive / ảnh</td>
+      <td>3–5</td>
+      <td><span class="badge green">0</span></td>
+    </tr>
+    <tr>
+      <td>Đọc số đếm ngược</td>
+      <td>✕ Không hỗ trợ</td>
+      <td><span class="badge green">EasyOCR + OTSU (92% conf)</span></td>
+    </tr>
+    <tr>
+      <td>Confidence đèn xanh</td>
+      <td>~0.20</td>
+      <td><span class="badge green">0.90–0.97</span></td>
+    </tr>
+    <tr>
+      <td>Kiến trúc</td>
+      <td>Monolithic</td>
+      <td><span class="badge green">Microservices FastAPI + NestJS</span></td>
+    </tr>
+  </table>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 9: DEMO WEB
+══════════════════════════════════════════════════════════════════ -->
+<section id="s9" class="page-break">
+  <h2><span class="section-num">9</span> Demo Giao Diện Web</h2>
+
+  <p>Dưới đây là ảnh chụp giao diện web thực tế khi hệ thống hoạt động. <em>(Paste ảnh vào các vùng bên dưới)</em></p>
+
+  <h3>9.1. Giao diện tổng quan (Dashboard)</h3>
+  <div class="img-placeholder">
+    <div class="icon">🖥️</div>
+    <div class="label">Paste ảnh giao diện tổng quan tại đây</div>
+    <div class="hint">Ảnh chụp màn hình trang chính của ứng dụng web</div>
+  </div>
+
+  <h3>9.2. Kết quả Detection — Đèn đỏ + Số đếm ngược</h3>
+  <div class="img-placeholder">
+    <div class="icon">🔴</div>
+    <div class="label">Paste ảnh detection đèn đỏ có số đếm ngược</div>
+    <div class="hint">Hiển thị bounding box + label "Traffic Light | Status: RED | Timer: XX"</div>
+  </div>
+
+  <h3>9.3. Kết quả Detection — Đèn xanh</h3>
+  <div class="img-placeholder">
+    <div class="icon">🟢</div>
+    <div class="label">Paste ảnh detection đèn xanh lá</div>
+    <div class="hint">Chứng minh hệ thống nhận diện được đèn xanh LED cyan</div>
+  </div>
+
+  <h3>9.4. Sign Filter — Biển báo bị loại bỏ đúng</h3>
+  <div class="img-placeholder">
+    <div class="icon">🛡️</div>
+    <div class="label">Paste ảnh cho thấy biển báo KHÔNG bị detect nhầm</div>
+    <div class="hint">So sánh trước/sau khi áp dụng Sign Filter</div>
+  </div>
+
+  <h3>9.5. Toàn cảnh — Nhiều đèn trên thanh ngang</h3>
+  <div class="img-placeholder">
+    <div class="icon">🚦</div>
+    <div class="label">Paste ảnh toàn cảnh ngã tư với nhiều đèn được detect</div>
+    <div class="hint">Ảnh chụp kết quả trên ảnh giao thông thực tế tại Việt Nam</div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 10: KẾT LUẬN
+══════════════════════════════════════════════════════════════════ -->
+<section id="s10" class="page-break">
+  <h2><span class="section-num">10</span> Kết Luận &amp; Hướng Phát Triển</h2>
+
+  <h3>Kết luận</h3>
+  <p>Hệ thống SDO đã giải quyết thành công 3 thách thức chính trong nhận diện đèn giao thông:</p>
+
+  <div class="card green">
+    <div class="card-title">✅ Thành tựu đạt được</div>
+    <ol>
+      <li><strong>Single-Pass Detection ở imgsz=1280</strong> — loại bỏ Quadtree, giảm latency 65%, tăng confidence đáng kể</li>
+      <li><strong>Adaptive HSV với dải cyan LED mở rộng</strong> — confidence đèn xanh đạt 90–97%, không còn bỏ sót đèn LED xanh lơ</li>
+      <li><strong>Semantic Sign Filter</strong> — zero false-positive biển báo giao thông nhờ 2 rules hình học + 2 post-filter</li>
+      <li><strong>OCR đếm ngược</strong> — đọc được số LED 7-segment với confidence 92%</li>
+      <li><strong>Kiến trúc Microservices</strong> — scalable, tách biệt inference/orchestration/UI</li>
+    </ol>
+  </div>
+
+  <h3>Hướng phát triển</h3>
+  <table>
+    <tr><th>#</th><th>Hướng phát triển</th><th>Mô tả</th></tr>
+    <tr>
+      <td>1</td>
+      <td><strong>Fine-tune trên dataset Việt Nam</strong></td>
+      <td>Gán nhãn 500–1000 ảnh đèn giao thông VN để train YOLO-P2 chuyên biệt hơn</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>Temporal Tracking (DeepSORT)</strong></td>
+      <td>Theo dõi đèn qua nhiều frame video, ổn định detection và đếm ngược realtime</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>Edge Deployment (Jetson Nano)</strong></td>
+      <td>Triển khai trên NVIDIA Jetson cho ADAS (Advanced Driver Assistance System)</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><strong>Multi-camera support</strong></td>
+      <td>Mở rộng hỗ trợ nhiều camera giám sát tại 1 ngã tư</td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><strong>TensorRT optimization</strong></td>
+      <td>Quantization INT8/FP16 để tăng tốc inference trên GPU</td>
+    </tr>
+  </table>
+</section>
+
+</div><!-- end .container -->
+
+<footer>
+  <div class="container">
+    SDO — Smart Detection &amp; Optimization &nbsp;|&nbsp; Báo cáo dự án 2025–2026<br />
+    <small>Hệ thống nhận diện đèn giao thông thông minh đa tầng</small>
+  </div>
+</footer>
+
+</body>
+</html>

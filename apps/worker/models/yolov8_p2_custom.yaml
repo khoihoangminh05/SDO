@@ -1,0 +1,50 @@
+# YOLOv8-P2 custom object detection model configuration with P2-P5 detection scales (stride 4, 8, 16, 32).
+# Optimized for extremely small object detection.
+
+nc: 4 # number of classes: red, yellow, green, off
+scales:
+  n: [0.33, 0.25, 1024]
+  s: [0.33, 0.50, 1024]
+  m: [0.67, 0.75, 768]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.25, 512]
+
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, Conv, [64, 3, 2]] # 0-P1/2
+  - [-1, 1, Conv, [128, 3, 2]] # 1-P2/4
+  - [-1, 3, C2f, [128, True]] # 2-P2/4 (stride 4 features)
+  - [-1, 1, Conv, [256, 3, 2]] # 3-P3/8
+  - [-1, 6, C2f, [256, True]] # 4-P3/8 (stride 8 features)
+  - [-1, 1, Conv, [512, 3, 2]] # 5-P4/16
+  - [-1, 6, C2f, [512, True]] # 6-P4/16 (stride 16 features)
+  - [-1, 1, Conv, [1024, 3, 2]] # 7-P5/32
+  - [-1, 3, C2f, [1024, True]] # 8-P5/32
+  - [-1, 1, SPPF, [1024, 5]] # 9-P5/32
+
+head:
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 10 (stride 16)
+  - [[-1, 6], 1, Concat, [1]] # 11 (stride 16) concat with layer 6 (P4 backbone)
+  - [-1, 3, C2f, [512]] # 12 (stride 16)
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 13 (stride 8)
+  - [[-1, 4], 1, Concat, [1]] # 14 (stride 8) concat with layer 4 (P3 backbone)
+  - [-1, 3, C2f, [256]] # 15 (stride 8) (P3 neck features)
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 16 (stride 4)
+  - [[-1, 2], 1, Concat, [1]] # 17 (stride 4) concat with layer 2 (P2 backbone)
+  - [-1, 3, C2f, [128]] # 18 (stride 4) (P2 neck features)
+
+  - [-1, 1, Conv, [128, 3, 2]] # 19 (stride 8)
+  - [[-1, 15], 1, Concat, [1]] # 20 (stride 8) concat with layer 15
+  - [-1, 3, C2f, [256]] # 21 (stride 8) (P3 neck features)
+
+  - [-1, 1, Conv, [256, 3, 2]] # 22 (stride 16)
+  - [[-1, 12], 1, Concat, [1]] # 23 (stride 16) concat with layer 12
+  - [-1, 3, C2f, [512]] # 24 (stride 16) (P4 neck features)
+
+  - [-1, 1, Conv, [512, 3, 2]] # 25 (stride 32)
+  - [[-1, 9], 1, Concat, [1]] # 26 (stride 32) concat with layer 9 (SPPF)
+  - [-1, 3, C2f, [1024]] # 27 (stride 32) (P5 neck features)
+
+  - [[18, 21, 24, 27], 1, Detect, [nc]] # 28 Detect (P2, P3, P4, P5)

@@ -1,0 +1,24 @@
+# Bosch Small Traffic Lights Dataset (BSTLD) — YOLO training config
+#
+# Labels are generated next to each image by (run from apps/worker):
+#   python scripts/convert_bstld_to_yolo.py --yaml datasets/dataset_train_rgb/train.yaml --images-root datasets
+#   python scripts/convert_bstld_to_yolo.py --yaml datasets/dataset_test_rgb/test.yaml --images-root datasets
+#
+# Ultralytics locates each label .txt next to its .png (no separate images/labels
+# split is required because there is no `/images/` segment in the paths).
+#
+# NOTE: train/val point at the recursive image trees. Ultralytics globs PNGs
+# recursively and reads the matching .txt beside each one. Empty .txt files are
+# treated as background/negative samples.
+
+path: D:/LapTrinh/System/SDO/apps/worker/datasets
+train: dataset_train_rgb/rgb/train
+val: dataset_val_sample/rgb/val
+
+# 4 classes — red/yellow/green kept compatible with custom_dataset, plus "off".
+nc: 4
+names:
+  0: red
+  1: yellow
+  2: green
+  3: off

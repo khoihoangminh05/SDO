@@ -1,0 +1,69 @@
+# YOLO26-P2: YOLO26 + P2 detection head (stride 4) for tiny object detection
+#
+# Novel contribution: adds stride-4 P2 head to YOLO26 to detect traffic lights
+# as small as 8px. Combined with YOLO26's built-in STAL + ProgLoss, this gives
+# both architecture-level (P2 feature pyramid) and training-level (STAL) coverage
+# for extremely small objects.
+#
+# Usage in training:
+#   model = YOLO("models/yolo26_p2.yaml").load("yolo26s.pt")
+#   (backbone layers 0-10 transfer; P2 head is randomly initialized)
+#
+# Detects at 4 scales: P2/4, P3/8, P4/16, P5/32
+
+nc: 4          # red, yellow, green, off
+end2end: True  # NMS-free (YOLO26 default)
+reg_max: 1     # simplified DFL (YOLO26 default)
+
+scales:
+  # [depth, width, max_channels]
+  n: [0.50, 0.25, 1024]
+  s: [0.50, 0.50, 1024]
+  m: [0.50, 1.00, 512]
+  l: [1.00, 1.00, 512]
+  x: [1.00, 1.50, 512]
+
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, Conv, [64, 3, 2]]                  # 0  P1/2
+  - [-1, 1, Conv, [128, 3, 2]]                 # 1  P2/4
+  - [-1, 2, C3k2, [256, False, 0.25]]          # 2  P2/4  ← P2 backbone features
+  - [-1, 1, Conv, [256, 3, 2]]                 # 3  P3/8
+  - [-1, 2, C3k2, [512, False, 0.25]]          # 4  P3/8  ← P3 backbone features
+  - [-1, 1, Conv, [512, 3, 2]]                 # 5  P4/16
+  - [-1, 2, C3k2, [512, True]]                 # 6  P4/16 ← P4 backbone features
+  - [-1, 1, Conv, [1024, 3, 2]]                # 7  P5/32
+  - [-1, 2, C3k2, [1024, True]]                # 8  P5/32
+  - [-1, 1, SPPF, [1024, 5, 3, True]]          # 9  P5/32 + SPPF
+  - [-1, 2, C2PSA, [1024]]                     # 10 P5/32 + attention
+
+head:
+  # ── Top-down path ────────────────────────────────────────────────────────
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 11 stride 16 (from 10)
+  - [[-1, 6], 1, Concat, [1]]                  # 12 cat P4 backbone
+  - [-1, 2, C3k2, [512, True]]                 # 13 P4 neck
+
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 14 stride 8  (from 13)
+  - [[-1, 4], 1, Concat, [1]]                  # 15 cat P3 backbone
+  - [-1, 2, C3k2, [256, True]]                 # 16 P3 neck
+
+  # ── P2 extension (novel) ─────────────────────────────────────────────────
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]] # 17 stride 4  (from 16)
+  - [[-1, 2], 1, Concat, [1]]                  # 18 cat P2 backbone
+  - [-1, 2, C3k2, [128, True]]                 # 19 P2 neck ← tiny objects
+
+  # ── Bottom-up path (rebuild with P2 context) ────────────────────────────
+  - [-1, 1, Conv, [128, 3, 2]]                 # 20 P2→P3 (stride 8)
+  - [[-1, 16], 1, Concat, [1]]                 # 21 cat P3 neck
+  - [-1, 2, C3k2, [256, True]]                 # 22 new P3 neck
+
+  - [-1, 1, Conv, [256, 3, 2]]                 # 23 P3→P4 (stride 16)
+  - [[-1, 13], 1, Concat, [1]]                 # 24 cat P4 neck
+  - [-1, 2, C3k2, [512, True]]                 # 25 new P4 neck
+
+  - [-1, 1, Conv, [512, 3, 2]]                 # 26 P4→P5 (stride 32)
+  - [[-1, 10], 1, Concat, [1]]                 # 27 cat P5 (C2PSA)
+  - [-1, 1, C3k2, [1024, True, 0.5, True]]     # 28 new P5 neck
+
+  # ── Detection: P2 / P3 / P4 / P5 ────────────────────────────────────────
+  - [[19, 22, 25, 28], 1, Detect, [nc]]        # Detect 4 scales

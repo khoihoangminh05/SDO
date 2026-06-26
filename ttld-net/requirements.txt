@@ -1,0 +1,17 @@
+# TTLD-Net — Python dependencies (see document/TTLD_Net_PROJECT_SPEC.md §11)
+
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.24.0
+ultralytics>=8.0.0
+pyyaml>=6.0
+pillow>=10.0.0
+opencv-python>=4.8.0
+matplotlib>=3.7.0
+tensorboard>=2.13.0
+tqdm>=4.65.0
+pytest>=8.0.0
+setuptools>=65.0.0
+
+# MMCV — install separately with matching CUDA wheel (GPU server):
+# pip install mmcv -f https://download.openmmlab.com/mmcv/dist/{cuXXX}/{torchX.X}/index.html
