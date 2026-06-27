@@ -1,0 +1,15 @@
+# Server-only deps — torch/torchvision installed via conda (NOT pip)
+# Usage: pip install -r requirements-server.txt
+
+numpy>=1.24.0
+pyyaml>=6.0
+pillow>=10.0.0
+opencv-python-headless>=4.8.0
+matplotlib>=3.7.0
+tensorboard>=2.13.0
+tqdm>=4.65.0
+pytest>=8.0.0
+setuptools>=65.0.0
+
+# YOLO baseline (Phase 1) — install after Phase 0 gate if disk is tight:
+# pip install ultralytics>=8.0.0

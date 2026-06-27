@@ -35,7 +35,11 @@ def _run_checks(strict_gpu: bool, dev_mode: bool) -> tuple[list[tuple[str, bool,
 
         checks.append(("MMCV DeformableAttention", True, "OK"))
     except ImportError as exc:
-        checks.append(("MMCV DeformableAttention", False, str(exc)[:80]))
+        detail = "not installed"
+        if not dev_mode:
+            helper = root / "scripts" / "install_mmcv.py"
+            detail = f"run: python {helper.name}  (GPU server Linux + CUDA required)"
+        checks.append(("MMCV DeformableAttention", False, detail))
         if strict_gpu:
             required_fail = True
 

@@ -1,6 +1,15 @@
-# TTLD-Net conda environment (GPU server — Linux recommended)
-# Create:  conda env create -f environment.yml
-# Activate: conda activate ttld-net
+# TTLD-Net conda environment (GPU server — Linux)
+#
+# BEFORE create: free disk space (need ~15 GB free)
+#   conda clean -a -y && pip cache purge
+#   df -h ~
+#
+# Create:
+#   conda env create -f environment.yml
+# Activate:
+#   conda activate ttld-net
+# Then MMCV:
+#   python scripts/install_mmcv.py --run
 
 name: ttld-net
 channels:
@@ -12,11 +21,8 @@ channels:
 dependencies:
   - python=3.10
   - pip
-  - pytorch>=2.1.0
-  - torchvision>=0.16.0
+  - pytorch=2.1.*
+  - torchvision=0.16.*
   - pytorch-cuda=12.1
   - pip:
-      - -r requirements.txt
-      # MMCV — install AFTER env activate, matching CUDA + torch:
-      # pip install mmcv==2.1.0 -f https://download.openmmlab.com/mmcv/dist/cu121/torch2.1.0/index.html
-      # Verify: python -c "from mmcv.ops import MultiScaleDeformableAttention; print('OK')"
+      - -r requirements-server.txt
