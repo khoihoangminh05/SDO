@@ -32,7 +32,6 @@ env/
 
 # ML / training artifacts
 runs/
-scratch/
 archive/
 *.pt
 *.pth
