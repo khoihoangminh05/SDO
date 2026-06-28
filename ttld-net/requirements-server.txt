@@ -10,6 +10,4 @@ tensorboard>=2.13.0
 tqdm>=4.65.0
 pytest>=8.0.0
 setuptools>=65.0.0
-
-# YOLO baseline (Phase 1) — install after Phase 0 gate if disk is tight:
-# pip install ultralytics>=8.0.0
+ultralytics>=8.0.0

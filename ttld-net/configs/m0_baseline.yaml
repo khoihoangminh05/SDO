@@ -3,6 +3,7 @@
 model:
   backbone: yolo26
   mode: baseline
+  baseline_weights: yolov8n.pt
   use_shallow_features: false
   use_soft_nms: false
   heads: []
@@ -10,6 +11,7 @@ model:
 training:
   epochs: 50
   batch_size: 16
+  imgsz: 1280
   optimizer: AdamW
   lr: 1.0e-4
   scheduler: CosineAnnealing

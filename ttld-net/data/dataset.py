@@ -33,11 +33,15 @@ class BoschDataset(Dataset):
         yaml_path: str | Path,
         transform: Callable[..., Any] | None = None,
         images_root: str | Path | None = None,
+        skip_missing: bool = True,
     ) -> None:
         self.yaml_path = Path(yaml_path)
         self.transform = transform
         self.images_root = Path(images_root) if images_root else self.yaml_path.parent
-        self.samples = self._load_yaml(self.yaml_path)
+        samples = self._load_yaml(self.yaml_path)
+        if skip_missing:
+            samples = [s for s in samples if s["image_path"].is_file()]
+        self.samples = samples
 
     def _load_yaml(self, yaml_path: Path) -> list[dict[str, Any]]:
         with yaml_path.open(encoding="utf-8") as handle:
@@ -133,10 +137,15 @@ def create_dataloader(
     pin_memory: bool = True,
     transform: Callable[..., Any] | None = None,
     images_root: str | Path | None = None,
+    split: str = "train",
 ) -> DataLoader:
     """Factory for Bosch DataLoader with custom collate."""
+    from data.transforms import get_train_transforms, get_val_transforms
+
     yaml_path = Path(yaml_path)
     root = Path(images_root) if images_root else yaml_path.parent
+    if transform is None:
+        transform = get_train_transforms() if split == "train" else get_val_transforms()
     dataset = BoschDataset(yaml_path, transform=transform, images_root=root)
     return DataLoader(
         dataset,

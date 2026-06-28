@@ -8,9 +8,12 @@ import torch
 import torchvision.transforms.functional as TF
 from torchvision import transforms
 
-
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
+
+# BSTLD native resolution: 1280 x 720 (W x H)
+TARGET_HEIGHT = 720
+TARGET_WIDTH = 1280
 
 
 class ComposeWithBoxes:
@@ -22,6 +25,28 @@ class ComposeWithBoxes:
     def __call__(self, image: Any, boxes: torch.Tensor) -> tuple[Any, torch.Tensor]:
         for transform in self.transforms_list:
             image, boxes = transform(image, boxes)
+        return image, boxes
+
+
+class ResizeWithBoxes:
+    """Resize image and scale box coordinates to target H x W."""
+
+    def __init__(self, height: int = TARGET_HEIGHT, width: int = TARGET_WIDTH) -> None:
+        self.height = height
+        self.width = width
+
+    def __call__(self, image: Any, boxes: torch.Tensor) -> tuple[Any, torch.Tensor]:
+        orig_w, orig_h = image.size
+        image = TF.resize(image, [self.height, self.width])
+        if boxes.numel() == 0:
+            return image, boxes
+        scale_x = self.width / orig_w
+        scale_y = self.height / orig_h
+        boxes = boxes.clone()
+        boxes[:, 0] *= scale_x
+        boxes[:, 1] *= scale_y
+        boxes[:, 2] *= scale_x
+        boxes[:, 3] *= scale_y
         return image, boxes
 
 
@@ -66,6 +91,7 @@ def get_train_transforms() -> ComposeWithBoxes:
     """Default training augmentation chain (Phase 1)."""
     return ComposeWithBoxes(
         [
+            ResizeWithBoxes(),
             RandomHorizontalFlip(p=0.5),
             ColorJitterWrapper(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.05),
             ToTensorNormalize(),
@@ -75,4 +101,4 @@ def get_train_transforms() -> ComposeWithBoxes:
 
 def get_val_transforms() -> ComposeWithBoxes:
     """Validation transforms without random augmentation."""
-    return ComposeWithBoxes([ToTensorNormalize()])
+    return ComposeWithBoxes([ResizeWithBoxes(), ToTensorNormalize()])

@@ -1,19 +1,18 @@
 # TTLD-Net — PROJECT STATE
 
-> File này lưu **trạng thái thực thi hiện tại** của dự án.
-> AI Agent đọc file này đầu tiên để biết đang ở đâu, đã làm gì, và cần làm gì tiếp theo.
+> AI Agent: đọc file này trước. Không làm lại task đã [x].
 
 ---
 
-## Current Phase: 0 — Hoàn thành (dev) | Chờ GPU server
+## Current Phase: 1 — Data Pipeline & Baseline (in progress)
 
 ---
 
 ## Phase Progress
 
 ```
-[x] Phase 0 — Chuẩn bị Môi trường          ✅ DEV PASS (GPU server: chạy setup_phase0.sh)
-[ ] Phase 1 — Data Pipeline & Baseline      ⏳ NEXT
+[x] Phase 0 — Chuẩn bị Môi trường          ✅ GPU + dev PASS
+[~] Phase 1 — Data Pipeline & Baseline      🔄 IN PROGRESS
 [ ] Phase 2 — High-Recall Candidate Generator  ⏳ BLOCKED
 [ ] Phase 3 — Semantic Context Branch       ⏳ BLOCKED
 [ ] Phase 4 — Implicit Topology Sampler     ⏳ BLOCKED
@@ -24,66 +23,51 @@
 
 ---
 
-## Phase 0 Results (2026-06-25)
-
-### Máy dev (Windows) — `python test_env.py --dev` ✅
-
-| Check | Status |
-|-------|--------|
-| PyTorch 2.12.0 | ✅ |
-| yaml, cv2, tensorboard, ultralytics, pytest | ✅ |
-| BSTLD train.yaml (5093 entries, 10756 boxes) | ✅ |
-| Val split (1000 YOLO images) | ✅ |
-| CUDA | ❌ CPU only (expected) |
-| MMCV DeformableAttention | ❌ Cần GPU server |
-
-Log: `ttld-net/logs/env_check.txt`
-
-### Dataset (T0.5) ✅
-
-```
-train: 5093 entries, 3153 images with boxes, 0 missing
-val:   1000 png (YOLO format via bstld.yaml)
-Top labels: Green=5207, Red=3057, RedLeft=1092, off=726, Yellow=444
-```
-
-Log: `ttld-net/logs/dataset_stats.txt`
-
-### GPU server — việc cần làm
-
-```bash
-cd ttld-net
-conda env create -f environment.yml   # hoặc: bash scripts/setup_phase0.sh
-conda activate ttld-net
-bash scripts/setup_phase0.sh          # cài MMCV + verify CUDA
-python test_env.py --strict-gpu       # gate đầy đủ
-```
-
----
-
-## Next Task (Phase 1)
-
-```
-T1.1 — Implement scripts/eda_bosch.py (histogram bbox, class distribution)
-```
-
-Sau đó: T1.3 DataLoader smoke test, T1.6 train M0 baseline trên GPU server.
-
----
-
-## Completed Phase 0 Tasks
+## Phase 1 Status
 
 | Task | File | Status |
 |------|------|--------|
-| T0.1 | CUDA check (dev: CPU) | ✅ dev / ⏳ GPU |
-| T0.2 | pip install requirements.txt | ✅ |
-| T0.3 | MMCV CUDA | ⏳ GPU server |
-| T0.4 | Scaffold ttld-net/ | ✅ |
-| T0.5 | verify_dataset.py | ✅ PASS |
-| Gate | test_env.py --dev | ✅ |
-| Setup scripts | setup_phase0.ps1, setup_phase0.sh | ✅ |
-| Conda env | environment.yml | ✅ |
+| T1.1 EDA | `scripts/eda_bosch.py` | ✅ |
+| T1.2 CLASS_MAPPING | `data/dataset.py` | ✅ |
+| T1.3 BoschDataset | `data/dataset.py` | ✅ |
+| T1.4 Augmentation + Resize 720×1280 | `data/transforms.py` | ✅ |
+| T1.5 DataLoader + collate | `data/dataset.py` | ✅ |
+| T1.6 Train M0 baseline | `train.py` + `utils/yolo_baseline.py` | ⏳ chạy trên GPU |
+| T1.C Eval + metrics JSON | `test.py` | ⏳ sau train |
+
+### EDA results (`logs/eda/eda_summary.json`)
+
+- 5093 entries, 10755 boxes, avg 2.1 boxes/image
+- **59.12%** boxes with width < 10px (tiny objects confirmed)
+- Class: Green 5417, Red 4163, Yellow 444, Off 731
+
+### Tests PASS (dev)
+
+```bash
+python -m pytest tests/test_phase1.py -v   # 3 passed
+```
 
 ---
 
-*Cập nhật file này sau mỗi phase hoàn thành.*
+## Next Task — T1.6 trên GPU server
+
+```bash
+cd ~/SDO/ttld-net
+conda activate ttld-net
+git pull   # lấy Phase 1 code mới
+
+# Train M0 baseline (~2-4h)
+python train.py --config configs/m0_baseline.yaml \
+  --output logs/ablation/m0_baseline --device 0
+
+# Evaluate → metrics JSON
+python test.py --config configs/m0_baseline.yaml \
+  --weights checkpoints/m0_baseline_best.pt \
+  --output results/ablation/m0_baseline_metrics.json --device 0
+```
+
+**Gate Phase 1:** `results/ablation/m0_baseline_metrics.json` tồn tại với `ap50`, `apsmall`, `recall`, `precision`, `fpr`.
+
+---
+
+*Cập nhật sau mỗi task.*
