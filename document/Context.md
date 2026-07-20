@@ -62,7 +62,7 @@ Không tự tạo thư mục mới nếu không được yêu cầu.
 
 ## Fixed Constraints — Không được thay đổi
 
-**Dataset**: Bosch Small Traffic Lights Dataset (`data/bosch/train.yaml`, `test.yaml`)
+**Dataset training**: Bosch Small Traffic Lights Dataset (`data/bosch/train.yaml`, `test.yaml`) — dataset **duy nhất dùng để train** toàn bộ M0–M4.
 
 **Backbone**: YOLO26 (file: `models/backbones/yolo26.py`)
 
@@ -70,8 +70,22 @@ Không tự tạo thư mục mới nếu không được yêu cầu.
 - Chuyển sang Faster R-CNN
 - Chuyển sang DETR hoặc bất kỳ transformer detector nào
 - Thay backbone khác
+- Train hoặc fine-tune trên bất kỳ dataset nào khác ngoài Bosch (kể cả các dataset dùng cho Phase 8)
 
 > Trừ khi được yêu cầu rõ ràng bởi người dùng.
+
+### Ngoại lệ — Dataset chỉ dùng để Đánh giá (Phase 8)
+
+Để chứng minh generalization (một trong ba thách thức cốt lõi ở trên), Phase 8 dùng thêm 4 dataset công khai **chỉ ở chế độ zero-shot inference/test — không train, không fine-tune**:
+
+| Dataset | Vai trò | Vùng miền |
+|---|---|---|
+| DTLD (DriveU) | Test domain shift camera/độ phân giải, có pictogram + trạng thái đèn vàng-đỏ | Đức |
+| S2TLD (SJTU) | Test domain shift lục địa khác, đèn nhấp nháy, vật thể dễ nhầm | Trung Quốc |
+| LISA | Test benchmark chuẩn cùng niche, so sánh trực tiếp với literature | Mỹ |
+| Cityscapes TL++ (CSTL) | Test mật độ đèn/ảnh khác biệt, so sánh SOTA công bố | Đức |
+
+Chi tiết protocol: xem `PROJECT_SPEC.md` Mục 14 và `PLAN.md` Phase 8.
 
 ---
 
@@ -186,7 +200,10 @@ Phase 0 (Env Setup)
                                             └── Phase 5 (Verification + InfoNCE)
                                                     └── Phase 6 (End-to-End Training)
                                                             └── Phase 7 (Ablation + Viz)
+                                                                    └── Phase 8 (Cross-Dataset & Robustness Eval)
 ```
+
+> Phase 8 chỉ cần checkpoint M0 và M4 đã train xong ở Phase 6/7 — không cần train lại, chỉ chạy inference zero-shot trên dataset ngoài.
 
 **Phase Gates** — phải PASS trước khi sang phase tiếp:
 - Phase 0: `test_env.py` pass, MMCV CUDA OK
@@ -197,6 +214,7 @@ Phase 0 (Env Setup)
 - Phase 5: VerificationMLP + InfoNCE convergence test PASS
 - Phase 6: APsmall +3%, FPR -15%, Recall > 95%
 - Phase 7: 5 ablation runs hoàn thành, xu hướng metrics đúng hướng
+- Phase 8: zero-shot inference PASS trên ≥3/4 dataset ngoài (DTLD, S2TLD, LISA, CSTL), báo cáo đầy đủ AP50/APsmall/FPR + size-stratified breakdown cho mỗi dataset
 
 ---
 

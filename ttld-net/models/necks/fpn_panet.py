@@ -79,11 +79,3 @@ class FPNPANet(nn.Module):
             bu.append(self.smooth_bu[idx](fused))
 
         return bu[0], bu[1], bu[2], bu[3], bu[4]
-
-    def project_context(
-        self, p4: torch.Tensor, p5: torch.Tensor, c4: int, c5: int
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Project deep features for the semantic context branch (Phase 3)."""
-        proj_p4 = FeatureProjection(c4, 256).to(p4.device)
-        proj_p5 = FeatureProjection(c5, 256).to(p5.device)
-        return proj_p4(p4), proj_p5(p5)

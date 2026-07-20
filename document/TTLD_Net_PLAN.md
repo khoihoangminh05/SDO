@@ -27,6 +27,7 @@ File này là **bản đồ thực thi** — nó trả lời câu hỏi **"Làm 
 - [Phase 5 — Verification & Contrastive Learning](#phase-5--verification--contrastive-learning)
 - [Phase 6 — End-to-End Training](#phase-6--end-to-end-training)
 - [Phase 7 — Ablation Study & Visualization](#phase-7--ablation-study--visualization)
+- [Phase 8 — Cross-Dataset Generalization & Robustness Evaluation](#phase-8--cross-dataset-generalization--robustness-evaluation)
 - [Tổng hợp Checklist Toàn Dự án](#tổng-hợp-checklist-toàn-dự-án)
 
 ---
@@ -95,9 +96,11 @@ Phase 0 (Env Setup)
                             └── Phase 5 (Verification + InfoNCE)
                                     └── Phase 6 (End-to-End Training)
                                             └── Phase 7 (Ablation + Viz)
+                                                    └── Phase 8 (Cross-Dataset & Robustness Eval)
 ```
 
 > Phase 2 và Phase 3 có thể phát triển **song song**, nhưng Phase 4 phải đợi cả hai hoàn thành.
+> Phase 8 chỉ cần checkpoint `m0_baseline_best.pth` và `m4_full_ttld_best.pth` từ Phase 6/7 — không train lại, chỉ inference.
 
 ---
 
@@ -1118,6 +1121,106 @@ Nếu xu hướng không đúng → phân tích nguyên nhân và báo cáo tron
 
 ---
 
+## Phase 8 — Cross-Dataset Generalization & Robustness Evaluation
+
+> **Tham chiếu SPEC**: Mục 14 (Cross-Dataset Generalization & Robustness Evaluation)
+
+### Mục tiêu
+
+Chứng minh TTLD-Net thực sự giải quyết được **Domain Shift** (Mục 1.2 SPEC), không chỉ overfit vào phân phối Bosch. Chạy zero-shot inference (không train lại) trên 4 dataset ngoài, đo robustness với corruption tổng hợp, đo latency thực tế, và kiểm tra ý nghĩa thống kê qua nhiều seed. Đây là bước bắt buộc trước khi viết paper draft.
+
+**Không train hoặc fine-tune trên bất kỳ dataset nào trong phase này** — chỉ dùng checkpoint đã có từ Phase 6/7.
+
+### Danh sách Task
+
+**T8.1 — Chuẩn bị Dataset Ngoài** | File: `scripts/prepare_external_datasets.py`
+
+Download và convert 4 dataset về format tương thích `BoschDataset`:
+- DTLD (DriveU) — Đức, 2MP, có pictogram + trạng thái vàng-đỏ
+- S2TLD (SJTU) — Trung Quốc, 5 class (thêm "wait-on")
+- LISA — Mỹ
+- Cityscapes TL++ (CSTL) — Đức
+
+Với mỗi dataset, viết hàm `remap_classes_to_ttld(raw_label) -> {0:Green, 1:Yellow, 2:Red, 3:Off}` và **ghi rõ docstring** quy tắc mapping cho từng class không tương thích (xem SPEC Mục 14.6). Loại bỏ nhãn không thể map (vd pictogram arrow riêng biệt) — không đoán.
+
+```bash
+python scripts/prepare_external_datasets.py --dataset dtld --output data/external/dtld/
+python scripts/prepare_external_datasets.py --dataset s2tld --output data/external/s2tld/
+python scripts/prepare_external_datasets.py --dataset lisa --output data/external/lisa/
+python scripts/prepare_external_datasets.py --dataset cstl --output data/external/cstl/
+```
+
+**T8.2 — Cross-Dataset Evaluation Script** | File: `scripts/eval_cross_dataset.py`
+
+Implement Protocol A + B + C từ SPEC Mục 14.3:
+- Load checkpoint `m0_baseline_best.pth` và `m4_full_ttld_best.pth`
+- Chạy inference zero-shot trên từng dataset ngoài (conf_threshold **strict**, giống `test.py` ở Phase 6 — không phải 0.05 của Stage 1)
+- Tính AP50/APsmall/Recall/Precision/FPR — cả tổng và size-stratified (`<8px`, `8-16px`, `16-32px`)
+- Nếu dataset có metadata ngày/đêm (DTLD, LISA) → tách thêm theo điều kiện
+
+```bash
+python scripts/eval_cross_dataset.py --weights checkpoints/m0_baseline_best.pth --dataset dtld --output results/cross_dataset/dtld_m0.json
+python scripts/eval_cross_dataset.py --weights checkpoints/m4_full_ttld_best.pth --dataset dtld --output results/cross_dataset/dtld_m4.json
+# lặp lại cho s2tld, lisa, cstl
+```
+
+**T8.3 — Robustness / Corruption Script** | File: `scripts/eval_robustness.py`
+
+Implement Protocol D: áp 5 loại corruption (Gaussian noise, motion blur, gamma thấp, fog synthetic, JPEG compression) × 3 severity level lên chính **Bosch test set gốc** (không cần dataset mới). Đo % giảm APsmall so với ảnh sạch cho M0 và M4.
+
+```python
+CORRUPTIONS = ["gaussian_noise", "motion_blur", "low_gamma", "synthetic_fog", "jpeg_compress"]
+SEVERITIES = [1, 2, 3]
+```
+
+**T8.4 — Latency Benchmark** | File: `scripts/benchmark_latency.py`
+
+Đo trên RTX 4090 thực tế, batch_size=1, 100 lần warm-up + 200 lần đo trung bình:
+- Params (M), FLOPs (G) — dùng `torchinfo` hoặc `fvcore`
+- ms/frame, FPS cho M0 và M4
+- Ghi rõ có/không dùng gradient checkpointing khi đo (phải tắt khi benchmark inference)
+
+**T8.5 — Multi-Seed Variance** | File: `scripts/eval_multi_seed.py`
+
+Train lại M4 với 2 seed khác (ngoài seed gốc đã có ở Phase 6) → tổng 3 seed. Tính mean ± std cho AP50/APsmall/FPR trên Bosch test set.
+
+> Đây là task duy nhất trong Phase 8 có train lại — nhưng chỉ train M4 trên Bosch (đúng dataset gốc), không train trên dataset ngoài.
+
+### Kiểm thử Phase 8
+
+**Test T8.A — Dataset Conversion Sanity Check**
+```python
+# Với mỗi dataset đã convert, kiểm tra:
+assert len(dataset) > 0
+sample_img, sample_boxes = dataset[0]
+assert sample_boxes.shape[-1] == 5  # x,y,w,h,class
+assert sample_boxes[:, -1].max() <= 3  # class_id trong {0,1,2,3}
+```
+
+**Test T8.B — Cross-Dataset Metrics Tồn tại**
+```bash
+ls results/cross_dataset/{dtld,s2tld,lisa,cstl}_m{0,4}.json
+```
+Tối thiểu 3/4 dataset phải có kết quả đầy đủ (một dataset có thể fail do vấn đề license/download — ghi rõ lý do nếu bỏ qua).
+
+**Test T8.C — Gap Analysis**
+```python
+# Với mỗi dataset ngoài, so sánh gap giữa M0 và M4:
+gap_m0 = metric_bosch_test["apsmall"] - metric_external["apsmall"]  # (M0)
+gap_m4 = metric_bosch_test["apsmall"] - metric_external["apsmall"]  # (M4)
+# Kỳ vọng: gap_m4 < gap_m0 (M4 generalize tốt hơn M0, ít bị domain shift hơn)
+# Nếu không đúng hướng → phân tích nguyên nhân, KHÔNG che giấu trong paper
+```
+
+**Test T8.D — Robustness & Latency Files Tồn tại**
+```bash
+ls results/cross_dataset/robustness_corruption.json results/cross_dataset/latency_benchmark.json results/cross_dataset/multi_seed_variance.json
+```
+
+**Gate để coi Phase 8 hoàn thành**: T8.A, T8.B (≥3/4 dataset), T8.D đều PASS. T8.C không bắt buộc đúng hướng 100% nhưng bắt buộc phải được phân tích và báo cáo trung thực.
+
+---
+
 ## Tổng hợp Checklist Toàn Dự án
 
 ### Phase Gates — Phải PASS trước khi sang phase tiếp theo
@@ -1131,6 +1234,8 @@ Nếu xu hướng không đúng → phân tích nguyên nhân và báo cáo tron
 [ ] Phase 5 Gate: VerificationMLP + InfoNCE convergence test PASS
 [ ] Phase 6 Gate: Final metrics — APsmall +3%, FPR -15%, Recall > 95%
 [ ] Phase 7 Gate: 5 ablation runs hoàn thành, xu hướng đúng hướng
+[ ] Phase 8 Gate: zero-shot inference PASS trên ≥3/4 dataset ngoài (DTLD/S2TLD/LISA/CSTL),
+                  size-stratified + robustness + latency + multi-seed đều có file kết quả
 ```
 
 ### Files Cần Tạo (theo thứ tự)
@@ -1160,6 +1265,12 @@ Phase 7:  scripts/run_ablation.py
           scripts/compare_ablation.py
           utils/visualize.py
           README.md
+Phase 8:  scripts/prepare_external_datasets.py
+          scripts/eval_cross_dataset.py
+          scripts/eval_robustness.py
+          scripts/benchmark_latency.py
+          scripts/eval_multi_seed.py
+          data/external/{dtld,s2tld,lisa,cstl}/
 ```
 
 ### Hyperparameter Reference (không phải đoán — đây là spec)

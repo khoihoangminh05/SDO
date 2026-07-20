@@ -19,6 +19,7 @@
 11. [Stack Công nghệ & Dependencies](#11-stack-công-nghệ--dependencies)
 12. [Chỉ số Đánh giá & Kết quả Kỳ vọng](#12-chỉ-số-đánh-giá--kết-quả-kỳ-vọng)
 13. [Ablation Study — 5 Biến thể Thực nghiệm](#13-ablation-study--5-biến-thể-thực-nghiệm)
+14. [Cross-Dataset Generalization & Robustness Evaluation](#14-cross-dataset-generalization--robustness-evaluation)
 
 ---
 
@@ -903,6 +904,8 @@ python -c "from mmcv.ops import MultiScaleDeformableAttention; print('✅ MMCV O
 | **Precision** | Tỉ lệ cảnh báo chính xác | Tránh false alarms |
 | **FPR** | False Positive Rate | Đo lường nhiễu |
 
+> **Bắt buộc báo cáo thêm size-stratified breakdown** cho AP50/APsmall/Recall/FPR theo 3 bin kích thước bbox: `<8px`, `8–16px`, `16–32px`. Chỉ báo APsmall gộp (COCO <32px) là không đủ để chứng minh cải thiện thực sự ở nhóm "siêu nhỏ" (~8×8px) — mục tiêu chính của dự án. Xem `scripts/eda_bosch.py` (T1.1) để lấy phân phối kích thước làm cơ sở chia bin.
+
 ### 12.2. Kết quả Kỳ vọng so với YOLO Baseline
 
 | Metric | Cải thiện Kỳ vọng | Ý nghĩa Thực tế |
@@ -957,6 +960,117 @@ done
 # Tổng hợp kết quả
 python scripts/compare_ablation.py --results_dir results/ablation/
 ```
+
+---
+
+## 14. Cross-Dataset Generalization & Robustness Evaluation
+
+### 14.1. Động lực
+
+Mục 1.2 đã xác định **Domain Shift** là một trong ba thách thức cốt lõi: hiệu suất suy giảm khi đổi điều kiện ngày/đêm hoặc loại camera. Toàn bộ Phase 0–7 chỉ train và test trên **một dataset duy nhất (Bosch/BSTLD)** — điều này không chứng minh được model giải quyết được Domain Shift, chỉ chứng minh model học tốt trên phân phối Bosch. Mục 14 định nghĩa một pha đánh giá bổ sung, **chạy sau khi Phase 7 hoàn thành**, không thay đổi training pipeline, không train lại model.
+
+**Nguyên tắc quan trọng**: các dataset trong mục này **chỉ dùng để test (zero-shot inference)**, tuyệt đối không dùng để train hoặc fine-tune (xem `Context.md` — Fixed Constraints).
+
+### 14.2. Bộ Dataset Đánh giá Ngoài (External Test Sets)
+
+| Dataset | Nguồn gốc | Đặc điểm | Ngách kiểm chứng |
+|---|---|---|---|
+| **DTLD** (DriveU Traffic Light Dataset) | 11 thành phố ở Đức, ảnh độ phân giải 2MP, có stereo + GPS/vehicle data | >230,000 đèn giao thông được gán nhãn, có pictogram và trạng thái đèn vàng-đỏ | Domain shift camera/độ phân giải/quốc gia |
+| **S2TLD** (SJTU Small Traffic Light Dataset) | Shanghai Jiao Tong University + Anhui University, Trung Quốc | 5,786 ảnh (~1920×1080 và 1280×720), 14,130 instance, 5 class (red/yellow/green/off/wait-on), cảnh có đèn nhấp nháy, thay đổi ánh sáng mạnh, vật thể dễ nhầm với đèn (đèn hậu xe) | Domain shift lục địa khác + Appearance Ambiguity (Mục 1.2) |
+| **LISA Traffic Light Dataset** | Mỹ | Benchmark phổ biến, thường dùng cùng Bosch+DTLD trong literature cùng niche | So sánh trực tiếp với các paper công bố khác |
+| **Cityscapes TL++ (CSTL)** | Đức, dựa trên Cityscapes | Mật độ đèn/ảnh khác biệt rõ so với Bosch/DTLD, dùng trong benchmark tiny-traffic-light gần đây | So sánh SOTA đã công bố trên cùng 3 dataset (Bosch/DTLD/CSTL) |
+
+### 14.3. Protocol Đánh giá
+
+**Protocol A — Zero-shot Cross-Dataset Transfer**
+```
+Train: Bosch (train split, không đổi)
+Test:  DTLD / S2TLD / LISA / CSTL (toàn bộ, KHÔNG fine-tune)
+Đo:    AP50, APsmall, Recall, Precision, FPR cho M0 (baseline) và M4 (full TTLD-Net)
+So sánh: gap = metric(Bosch test) - metric(external test) — gap nhỏ hơn ở M4 so với M0
+         chứng minh Topology Sampler học context tổng quát, không overfit Bosch.
+```
+
+**Protocol B — Size-Stratified Breakdown**
+```
+Với mỗi dataset ở trên, chia kết quả theo 3 bin: <8px, 8-16px, 16-32px
+(áp dụng luôn cho Bosch test set nội bộ — không chỉ external)
+```
+
+**Protocol C — Condition-Stratified (nếu dataset có metadata)**
+```
+DTLD và LISA có thể tách theo ngày/đêm — báo riêng APsmall/FPR cho từng điều kiện.
+Nếu dataset không có nhãn điều kiện, dùng heuristic độ sáng trung bình ảnh (mean pixel intensity)
+để phân nhóm ngày/đêm gần đúng.
+```
+
+**Protocol D — Synthetic Corruption Robustness** (không cần dataset mới)
+```
+Áp corruption lên chính Bosch test set gốc theo kiểu ImageNet-C:
+- Gaussian noise (severity 1-3)
+- Motion blur
+- Gamma thấp (giả lập điều kiện đêm)
+- Fog/haze synthetic
+- JPEG compression
+Đo APsmall degradation (%) theo từng loại corruption, từng severity level.
+File: scripts/eval_robustness.py (xem 14.5)
+```
+
+**Protocol E — Latency / Throughput**
+```
+Đo trên chính GPU dùng để train (RTX 4090):
+- Params (M), FLOPs (G) cho M0 và M4
+- ms/frame (batch_size=1), FPS
+Lý do: N candidates ở Stage 1 có thể lên tới vài nghìn/ảnh (xem Phase 2), cộng thêm
+Deformable Attention ở Stage 2 → compute cost có thể tăng đáng kể so với YOLO baseline.
+Phải báo cáo trade-off AP vs latency trung thực trong paper.
+```
+
+**Protocol F — Statistical Significance**
+```
+Chạy M4 (full model) với tối thiểu 3 random seed khác nhau.
+Báo cáo mean ± std cho AP50/APsmall/FPR, không chỉ 1 số run tốt nhất.
+```
+
+### 14.4. Output Kỳ vọng
+
+```
+results/cross_dataset/
+├── dtld_metrics.json
+├── s2tld_metrics.json
+├── lisa_metrics.json
+├── cstl_metrics.json
+├── size_stratified_breakdown.json     # Protocol B, mọi dataset
+├── condition_stratified_breakdown.json # Protocol C
+├── robustness_corruption.json          # Protocol D
+├── latency_benchmark.json              # Protocol E
+└── multi_seed_variance.json            # Protocol F
+```
+
+### 14.5. File Cần Tạo
+
+```
+scripts/prepare_external_datasets.py   # download + convert DTLD/S2TLD/LISA/CSTL sang format
+                                        # tương thích BoschDataset (class remapping bắt buộc,
+                                        # vì mỗi dataset có class set khác — xem 14.6)
+scripts/eval_cross_dataset.py          # Protocol A, B, C
+scripts/eval_robustness.py             # Protocol D
+scripts/benchmark_latency.py           # Protocol E
+scripts/eval_multi_seed.py             # Protocol F
+```
+
+### 14.6. Lưu ý Quan trọng — Class Mapping Không Đồng nhất
+
+Mỗi dataset ngoài có class set khác Bosch (ví dụ DTLD có thêm pictogram + trạng thái đèn vàng-đỏ, S2TLD có thêm "wait-on"). **Không đoán mapping** — khi implement `prepare_external_datasets.py`, phải map về đúng 4 class gốc của TTLD-Net (`Green, Yellow, Red, Off` — xem `CLASS_MAPPING` ở Mục 8), loại các class không tương thích (vd pictogram arrow) hoặc gộp về class gần nhất, và ghi rõ quy tắc mapping trong docstring để đảm bảo reproducibility.
+
+### 14.7. Gate để coi Phase 8 hoàn thành
+
+- [ ] Zero-shot inference chạy được không lỗi trên ít nhất 3/4 dataset ngoài
+- [ ] `size_stratified_breakdown.json` có đủ 3 bin cho cả Bosch-test và external test
+- [ ] `robustness_corruption.json` có đủ 5 loại corruption × 3 severity
+- [ ] `latency_benchmark.json` có params/FLOPs/FPS cho M0 và M4
+- [ ] `multi_seed_variance.json` có mean±std từ ≥3 seed cho M4
+- [ ] Bảng tổng hợp kết quả đưa vào README.md / paper draft
 
 ---
 
