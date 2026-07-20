@@ -296,15 +296,28 @@ class ImplicitTopologySampler(nn.Module):
         value, spatial_shapes, level_start_index = flatten_multiscale_features(fctx_list)
         reference_points = expand_reference_points(pq, self.num_levels)
 
-        attended = self.deform_attn(
-            query=fcand,
-            key=value,
-            value=value,
-            identity=fcand,
-            reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
-            level_start_index=level_start_index,
-        )
+        # Deformable attention is unstable in fp16 on large query counts.
+        attn_dtype = torch.float32 if fcand.dtype == torch.float16 else fcand.dtype
+        if attn_dtype != fcand.dtype:
+            attended = self.deform_attn(
+                query=fcand.to(attn_dtype),
+                key=value.to(attn_dtype),
+                value=value.to(attn_dtype),
+                identity=fcand.to(attn_dtype),
+                reference_points=reference_points.to(attn_dtype),
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+            ).to(fcand.dtype)
+        else:
+            attended = self.deform_attn(
+                query=fcand,
+                key=value,
+                value=value,
+                identity=fcand,
+                reference_points=reference_points,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+            )
         return self.proj(attended)
 
 

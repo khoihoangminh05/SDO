@@ -97,16 +97,18 @@ class DetectionLoss(nn.Module):
                 cls_indices.append((batch_idx, grid_y, grid_x))
 
                 tx, ty, tw, th = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
-                pred_cx = (gx[grid_y, grid_x] + tx[batch_idx, grid_y, grid_x].sigmoid()) * stride
-                pred_cy = (gy[grid_y, grid_x] + ty[batch_idx, grid_y, grid_x].sigmoid()) * stride
-                pred_bw = tw[batch_idx, grid_y, grid_x].exp().clamp(max=50.0) * stride
-                pred_bh = th[batch_idx, grid_y, grid_x].exp().clamp(max=50.0) * stride
+                tw_safe = tw[batch_idx, grid_y, grid_x].float().clamp(-4.0, 4.0)
+                th_safe = th[batch_idx, grid_y, grid_x].float().clamp(-4.0, 4.0)
+                pred_cx = (gx[grid_y, grid_x] + tx[batch_idx, grid_y, grid_x].float().sigmoid()) * stride
+                pred_cy = (gy[grid_y, grid_x] + ty[batch_idx, grid_y, grid_x].float().sigmoid()) * stride
+                pred_bw = tw_safe.exp().clamp(max=50.0) * stride
+                pred_bh = th_safe.exp().clamp(max=50.0) * stride
                 box_preds.append(torch.stack([pred_cx, pred_cy, pred_bw, pred_bh]))
                 box_targets.append(
                     torch.tensor([cx, cy, bw, bh], device=device, dtype=box.dtype)
                 )
 
-        obj_loss = F.binary_cross_entropy_with_logits(obj, obj_target)
+        obj_loss = F.binary_cross_entropy_with_logits(obj.float(), obj_target.float())
 
         if not cls_indices:
             return self.obj_weight * obj_loss
@@ -114,7 +116,7 @@ class DetectionLoss(nn.Module):
         cls_logits = torch.stack(
             [cls[b, :, y, x] for b, y, x in cls_indices],
             dim=0,
-        )
+        ).float()
         cls_labels = torch.tensor(cls_targets, device=device, dtype=torch.long)
         cls_loss = self._focal_ce(cls_logits, cls_labels)
 

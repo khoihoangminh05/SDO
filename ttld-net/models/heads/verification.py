@@ -110,7 +110,7 @@ def label_candidates_batch(
             continue
 
         cand_labels = match_candidates_to_gt(image_cands[:n], gt, iou_threshold)
-        labels[batch_idx, :n] = cand_labels.cpu()
+        labels[batch_idx, :n] = cand_labels.to(labels.device)
 
         for cand_idx in range(n):
             image_cands[cand_idx]["is_false_positive"] = cand_labels[cand_idx].item() < 0.5
@@ -240,7 +240,10 @@ def verification_bce_loss(valid_logits: torch.Tensor, labels: torch.Tensor) -> t
     if not valid_mask.any():
         return valid_logits.new_zeros(())
 
-    return F.binary_cross_entropy_with_logits(preds[valid_mask], labels[valid_mask])
+    return F.binary_cross_entropy_with_logits(
+        preds[valid_mask].float(),
+        labels[valid_mask].float(),
+    )
 
 
 def compute_topology_loss(

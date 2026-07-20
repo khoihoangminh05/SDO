@@ -112,6 +112,28 @@ def test_training_step_backward() -> None:
     assert not torch.isnan(losses["total"])
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_amp_training_loss_finite() -> None:
+    """AMP forward + fp32 loss must stay finite on GPU."""
+    from losses.infonce_loss import InfoNCELoss
+    from utils.config import load_config
+
+    from models.ttld_net import TTLDNet
+
+    cfg = load_config(ROOT / "configs" / "m4_full_ttld.yaml")
+    model = TTLDNet(cfg).cuda()
+    images = torch.randn(1, 3, 640, 640, device="cuda")
+    targets = [torch.tensor([[320.0, 320.0, 30.0, 30.0, 2.0]], device="cuda")]
+
+    with torch.autocast(device_type="cuda", dtype=torch.float16):
+        outputs = model(images)
+    with torch.autocast(device_type="cuda", enabled=False):
+        losses = model.compute_losses(outputs, targets, loss_fns={"infonce": InfoNCELoss()})
+
+    assert torch.isfinite(losses["total"]).all()
+    assert not torch.isnan(outputs["zi"]).any()
+
+
 @pytest.mark.skipif(SKIP_NO_YAML, reason="yolo26_p2.yaml not found")
 def test_evaluate_model_smoke() -> None:
     """Metrics pipeline runs on one synthetic batch."""

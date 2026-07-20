@@ -71,6 +71,21 @@ def _autocast_context(device: torch.device, enabled: bool):
     return nullcontext()
 
 
+def _loss_has_nan(losses: dict[str, torch.Tensor]) -> bool:
+    for value in losses.values():
+        if not torch.isfinite(value).all():
+            return True
+    return False
+
+
+def _format_losses(losses: dict[str, torch.Tensor]) -> str:
+    parts = []
+    for key in ("total", "det", "topology", "verify"):
+        if key in losses:
+            parts.append(f"{key}={float(losses[key].detach()):.4f}")
+    return " | ".join(parts)
+
+
 def train_ttld(
     cfg: TTLDConfig,
     output_dir: Path,
@@ -158,6 +173,7 @@ def train_ttld(
     for epoch in range(epochs):
         model.train()
         epoch_losses: dict[str, float] = {}
+        steps_this_epoch = 0
 
         for images, targets in train_loader:
             if max_steps is not None and global_step >= max_steps:
@@ -169,7 +185,16 @@ def train_ttld(
             optimizer.zero_grad(set_to_none=True)
             with _autocast_context(torch_device, use_amp):
                 outputs = model(images)
+
+            # Losses in fp32 — avoids NaN from fp16 BCE/InfoNCE on large tensors.
+            with _autocast_context(torch_device, enabled=False):
                 losses = model.compute_losses(outputs, targets, loss_fns)
+
+            if _loss_has_nan(losses):
+                print(f"WARNING: non-finite loss at step {global_step + 1}: {_format_losses(losses)}")
+                optimizer.zero_grad(set_to_none=True)
+                del outputs, losses
+                continue
 
             scaler.scale(losses["total"]).backward()
             scaler.unscale_(optimizer)
@@ -181,6 +206,7 @@ def train_ttld(
             scaler.update()
 
             global_step += 1
+            steps_this_epoch += 1
             for key, value in losses.items():
                 epoch_losses[key] = epoch_losses.get(key, 0.0) + float(value.detach())
 
@@ -197,9 +223,7 @@ def train_ttld(
         scheduler.step()
         writer.add_scalar("LR", optimizer.param_groups[0]["lr"], epoch)
 
-        num_steps = max(len(train_loader), 1)
-        if max_steps is not None:
-            num_steps = min(num_steps, max_steps)
+        num_steps = max(steps_this_epoch, 1)
         for key, total_val in epoch_losses.items():
             writer.add_scalar(f"Epoch/{key}", total_val / num_steps, epoch)
 
@@ -210,8 +234,8 @@ def train_ttld(
             model,
             val_loader,
             torch_device,
-            conf_threshold=cfg.data.eval_conf_threshold,
-            use_verifier=use_verifier,
+            conf_threshold=cfg.data.conf_threshold if max_steps is not None else cfg.data.eval_conf_threshold,
+            use_verifier=use_verifier if max_steps is None else False,
             max_batches=20 if max_steps is not None else None,
         )
         for key, value in val_metrics.items():

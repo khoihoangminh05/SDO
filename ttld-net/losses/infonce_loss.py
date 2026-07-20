@@ -26,9 +26,9 @@ class InfoNCELoss(nn.Module):
             z_pos: (B, N, D) positive context embeddings.
             z_neg_list: (B, N, M, D) negative contexts.
         """
-        zi_norm = F.normalize(zi, dim=-1)
-        zp_norm = F.normalize(z_pos, dim=-1)
-        zn_norm = F.normalize(z_neg_list, dim=-1)
+        zi_norm = F.normalize(zi, dim=-1, eps=1e-6)
+        zp_norm = F.normalize(z_pos, dim=-1, eps=1e-6)
+        zn_norm = F.normalize(z_neg_list, dim=-1, eps=1e-6)
 
         pos_sim = (zi_norm * zp_norm).sum(-1) / self.tau
         neg_sim = torch.einsum("bnd,bnmd->bnm", zi_norm, zn_norm) / self.tau
