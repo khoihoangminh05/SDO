@@ -206,6 +206,16 @@ def train_ttld(
                     )
                 continue
 
+            if not losses["total"].requires_grad:
+                consecutive_bad += 1
+                print(
+                    f"WARNING: loss has no grad at step {global_step + 1}: "
+                    f"{_format_losses(losses)} (skipped {consecutive_bad}x)"
+                )
+                optimizer.zero_grad(set_to_none=True)
+                del outputs, losses
+                continue
+
             consecutive_bad = 0
             scaler.scale(losses["total"]).backward()
             scaler.unscale_(optimizer)

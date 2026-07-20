@@ -121,12 +121,13 @@ def test_training_step_backward() -> None:
     outputs = model(images)
     losses = model.compute_losses(outputs, targets, loss_fns={"infonce": InfoNCELoss()})
 
+    assert losses["total"].requires_grad
     optimizer.zero_grad()
     losses["total"].backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
     optimizer.step()
 
-    assert not torch.isnan(losses["total"])
+    assert torch.isfinite(losses["total"])
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")

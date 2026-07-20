@@ -39,6 +39,10 @@ class DetectionLoss(nn.Module):
         self.max_obj_negatives = max_obj_negatives
         self.logit_clamp = logit_clamp
 
+    def _zero_loss(self, *tensors: torch.Tensor) -> torch.Tensor:
+        """Scalar zero that stays connected to the autograd graph."""
+        return sum(tensor.sum() for tensor in tensors) * 0.0
+
     def forward(
         self,
         raw_outputs: list[dict[str, Any]],
@@ -47,8 +51,8 @@ class DetectionLoss(nn.Module):
         if not raw_outputs:
             return torch.tensor(0.0)
 
-        device = raw_outputs[0]["obj"].device
-        total = torch.tensor(0.0, device=device)
+        anchor = raw_outputs[0]["obj"]
+        total = self._zero_loss(anchor)
         scales = 0
 
         for scale in raw_outputs:
@@ -62,8 +66,11 @@ class DetectionLoss(nn.Module):
                 scales += 1
 
         if scales == 0:
-            return torch.tensor(0.0, device=device)
-        return total / scales
+            parts = [scale["obj"] for scale in raw_outputs]
+            parts += [scale["cls"] for scale in raw_outputs]
+            parts += [scale["box"] for scale in raw_outputs]
+            return self._zero_loss(*parts)
+        return total
 
     def _sampled_obj_loss(
         self,
@@ -84,7 +91,7 @@ class DetectionLoss(nn.Module):
             neg_idx = neg_idx[pick]
 
         if pos_idx.numel() == 0 and neg_idx.numel() == 0:
-            return obj.new_zeros(())
+            return self._zero_loss(obj)
 
         if pos_idx.numel() == 0:
             sample_idx = neg_idx
@@ -112,7 +119,7 @@ class DetectionLoss(nn.Module):
         device = obj.device
 
         if not torch.isfinite(obj).all() or not torch.isfinite(cls).all() or not torch.isfinite(box).all():
-            return torch.tensor(0.0, device=device)
+            return self._zero_loss(obj, cls, box)
 
         obj_target = torch.zeros_like(obj)
         pos_mask = torch.zeros(batch_size, height, width, dtype=torch.bool, device=device)
@@ -183,7 +190,7 @@ class DetectionLoss(nn.Module):
             + self.box_weight * box_loss
         )
         if not torch.isfinite(total):
-            return torch.tensor(0.0, device=device)
+            return self._zero_loss(obj, cls, box)
         return total
 
     def _focal_ce(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:

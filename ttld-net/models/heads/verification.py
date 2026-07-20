@@ -238,7 +238,7 @@ def verification_bce_loss(valid_logits: torch.Tensor, labels: torch.Tensor) -> t
 
     valid_mask = labels >= 0
     if not valid_mask.any():
-        return valid_logits.new_zeros(())
+        return valid_logits.sum() * 0.0
 
     return F.binary_cross_entropy_with_logits(
         preds[valid_mask].float(),
@@ -256,7 +256,7 @@ def compute_topology_loss(
     """InfoNCE contrastive loss on true-positive topology embeddings."""
     packed = prepare_infonce_tensors(zi, labels, confidences, n_hard=n_hard)
     if packed is None:
-        return zi.new_zeros(())
+        return zi.sum() * 0.0
 
     zi_anchor, z_pos, z_neg = packed
     return infonce(

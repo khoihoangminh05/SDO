@@ -146,7 +146,7 @@ class TTLDNet(nn.Module):
 
         loss_fns = loss_fns or {}
         losses: dict[str, torch.Tensor] = {}
-        total = outputs["fcand"].new_zeros(())
+        total = outputs["fcand"].sum() * 0.0
 
         det_fn = loss_fns.get("detection")
         if det_fn is None:
