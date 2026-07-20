@@ -14,7 +14,8 @@ class DetectionLoss(nn.Module):
     YOLO-style assignment on P1/P2/P3 grid cells.
 
     Positive cell = GT center falls inside the cell at each stride.
-    Uses focal-modulated classification and L1 box regression on positives.
+    Objectness uses positive cells + a capped random negative sample so
+    720x1280 / stride-2 grids do not blow up memory or produce NaN grads.
     """
 
     def __init__(
@@ -25,6 +26,8 @@ class DetectionLoss(nn.Module):
         obj_weight: float = 1.0,
         cls_weight: float = 1.0,
         box_weight: float = 1.0,
+        max_obj_negatives: int = 4096,
+        logit_clamp: float = 20.0,
     ) -> None:
         super().__init__()
         self.num_classes = num_classes
@@ -33,6 +36,8 @@ class DetectionLoss(nn.Module):
         self.obj_weight = obj_weight
         self.cls_weight = cls_weight
         self.box_weight = box_weight
+        self.max_obj_negatives = max_obj_negatives
+        self.logit_clamp = logit_clamp
 
     def forward(
         self,
@@ -52,10 +57,48 @@ class DetectionLoss(nn.Module):
             box = scale["box"]
             stride = int(scale["stride"])
             loss = self._scale_loss(obj, cls, box, stride, targets)
-            total = total + loss
-            scales += 1
+            if torch.isfinite(loss):
+                total = total + loss
+                scales += 1
 
-        return total / max(scales, 1)
+        if scales == 0:
+            return torch.tensor(0.0, device=device)
+        return total / scales
+
+    def _sampled_obj_loss(
+        self,
+        obj: torch.Tensor,
+        obj_target: torch.Tensor,
+        pos_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        """BCE on positives + capped random negatives (avoids full-grid NaN)."""
+        obj_flat = obj[:, 0].float().clamp(-self.logit_clamp, self.logit_clamp)
+        target_flat = obj_target[:, 0].float()
+
+        pos_idx = pos_mask.nonzero(as_tuple=False)
+        neg_mask = ~pos_mask
+        neg_idx = neg_mask.nonzero(as_tuple=False)
+
+        if neg_idx.shape[0] > self.max_obj_negatives:
+            pick = torch.randperm(neg_idx.shape[0], device=obj.device)[: self.max_obj_negatives]
+            neg_idx = neg_idx[pick]
+
+        if pos_idx.numel() == 0 and neg_idx.numel() == 0:
+            return obj.new_zeros(())
+
+        if pos_idx.numel() == 0:
+            sample_idx = neg_idx
+        elif neg_idx.numel() == 0:
+            sample_idx = pos_idx
+        else:
+            sample_idx = torch.cat([pos_idx, neg_idx], dim=0)
+
+        b_idx = sample_idx[:, 0]
+        y_idx = sample_idx[:, 1]
+        x_idx = sample_idx[:, 2]
+        logits = obj_flat[b_idx, y_idx, x_idx]
+        labels = target_flat[b_idx, y_idx, x_idx]
+        return F.binary_cross_entropy_with_logits(logits, labels)
 
     def _scale_loss(
         self,
@@ -67,6 +110,9 @@ class DetectionLoss(nn.Module):
     ) -> torch.Tensor:
         batch_size, _, height, width = obj.shape
         device = obj.device
+
+        if not torch.isfinite(obj).all() or not torch.isfinite(cls).all() or not torch.isfinite(box).all():
+            return torch.tensor(0.0, device=device)
 
         obj_target = torch.zeros_like(obj)
         pos_mask = torch.zeros(batch_size, height, width, dtype=torch.bool, device=device)
@@ -86,14 +132,21 @@ class DetectionLoss(nn.Module):
                 continue
             for box_gt in gt:
                 cx, cy, bw, bh, class_id = box_gt.tolist()
+                if not all(torch.isfinite(torch.tensor([cx, cy, bw, bh]))):
+                    continue
+
                 grid_x = int(cx / stride)
                 grid_y = int(cy / stride)
                 if not (0 <= grid_x < width and 0 <= grid_y < height):
                     continue
 
+                cls_id = int(class_id)
+                if cls_id < 0 or cls_id >= self.num_classes:
+                    cls_id = min(max(cls_id, 0), self.num_classes - 1)
+
                 pos_mask[batch_idx, grid_y, grid_x] = True
                 obj_target[batch_idx, 0, grid_y, grid_x] = 1.0
-                cls_targets.append(int(class_id))
+                cls_targets.append(cls_id)
                 cls_indices.append((batch_idx, grid_y, grid_x))
 
                 tx, ty, tw, th = box[:, 0], box[:, 1], box[:, 2], box[:, 3]
@@ -105,10 +158,10 @@ class DetectionLoss(nn.Module):
                 pred_bh = th_safe.exp().clamp(max=50.0) * stride
                 box_preds.append(torch.stack([pred_cx, pred_cy, pred_bw, pred_bh]))
                 box_targets.append(
-                    torch.tensor([cx, cy, bw, bh], device=device, dtype=box.dtype)
+                    torch.tensor([cx, cy, bw, bh], device=device, dtype=torch.float32)
                 )
 
-        obj_loss = F.binary_cross_entropy_with_logits(obj.float(), obj_target.float())
+        obj_loss = self._sampled_obj_loss(obj, obj_target, pos_mask)
 
         if not cls_indices:
             return self.obj_weight * obj_loss
@@ -116,22 +169,25 @@ class DetectionLoss(nn.Module):
         cls_logits = torch.stack(
             [cls[b, :, y, x] for b, y, x in cls_indices],
             dim=0,
-        ).float()
+        ).float().clamp(-self.logit_clamp, self.logit_clamp)
         cls_labels = torch.tensor(cls_targets, device=device, dtype=torch.long)
         cls_loss = self._focal_ce(cls_logits, cls_labels)
 
-        box_pred = torch.stack(box_preds, dim=0)
-        box_tgt = torch.stack(box_targets, dim=0)
+        box_pred = torch.stack(box_preds, dim=0).float()
+        box_tgt = torch.stack(box_targets, dim=0).float()
         box_loss = F.l1_loss(box_pred, box_tgt)
 
-        return (
+        total = (
             self.obj_weight * obj_loss
             + self.cls_weight * cls_loss
             + self.box_weight * box_loss
         )
+        if not torch.isfinite(total):
+            return torch.tensor(0.0, device=device)
+        return total
 
     def _focal_ce(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         ce = F.cross_entropy(logits, targets, reduction="none")
-        pt = torch.exp(-ce)
+        pt = torch.exp(-ce).clamp(min=1e-6, max=1.0 - 1e-6)
         alpha_factor = self.alpha * (targets > 0).float() + (1.0 - self.alpha) * (targets == 0).float()
         return (alpha_factor * (1 - pt) ** self.gamma * ce).mean()

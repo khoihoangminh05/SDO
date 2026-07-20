@@ -84,7 +84,24 @@ def test_detection_loss_runs() -> None:
     ]
     loss = DetectionLoss()(raw, targets)
     assert loss.ndim == 0
-    assert not torch.isnan(loss)
+    assert torch.isfinite(loss)
+
+
+def test_detection_loss_large_grid_finite() -> None:
+    """Sampled objectness loss stays finite on P1-sized grids."""
+    from losses.detection_loss import DetectionLoss
+
+    raw = [
+        {
+            "obj": torch.randn(1, 1, 360, 640),
+            "cls": torch.randn(1, 4, 360, 640),
+            "box": torch.randn(1, 4, 360, 640),
+            "stride": 2,
+        }
+    ]
+    targets = [torch.tensor([[640.0, 360.0, 40.0, 40.0, 2.0]])]
+    loss = DetectionLoss(max_obj_negatives=2048)(raw, targets)
+    assert torch.isfinite(loss)
 
 
 def test_training_step_backward() -> None:

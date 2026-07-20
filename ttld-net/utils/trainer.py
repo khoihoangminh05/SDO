@@ -161,6 +161,7 @@ def train_ttld(
     epochs = max_epochs or cfg.training.epochs
     best_recall = -1.0
     global_step = 0
+    consecutive_bad = 0
 
     use_verifier = cfg.model.mode == "full"
 
@@ -191,11 +192,21 @@ def train_ttld(
                 losses = model.compute_losses(outputs, targets, loss_fns)
 
             if _loss_has_nan(losses):
-                print(f"WARNING: non-finite loss at step {global_step + 1}: {_format_losses(losses)}")
+                consecutive_bad += 1
+                print(
+                    f"WARNING: non-finite loss at step {global_step + 1}: "
+                    f"{_format_losses(losses)} (skipped {consecutive_bad}x)"
+                )
                 optimizer.zero_grad(set_to_none=True)
                 del outputs, losses
+                if consecutive_bad >= 20:
+                    raise RuntimeError(
+                        "Training aborted: 20 consecutive batches with non-finite loss. "
+                        "Try --batch-size 2 and check dataset labels."
+                    )
                 continue
 
+            consecutive_bad = 0
             scaler.scale(losses["total"]).backward()
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(
