@@ -6,7 +6,7 @@
 
 ---
 
-## Current Phase: 4 — Implicit Topology Sampler
+## Current Phase: 5 — Verification & Contrastive Learning
 
 ---
 
@@ -17,8 +17,8 @@
 [x] Phase 1 — Data Pipeline & Baseline      ✅ COMPLETED
 [x] Phase 2 — High-Recall Candidate Generator  ✅ COMPLETED
 [x] Phase 3 — Semantic Context Branch       ✅ COMPLETED
-[ ] Phase 4 — Implicit Topology Sampler     🔄 IN PROGRESS  ← ĐANG Ở ĐÂY
-[ ] Phase 5 — Verification & Contrastive    ⏳ BLOCKED (chờ Phase 4)
+[x] Phase 4 — Implicit Topology Sampler     ✅ COMPLETED
+[ ] Phase 5 — Verification & Contrastive    🔄 IN PROGRESS  ← ĐANG Ở ĐÂY
 [ ] Phase 6 — End-to-End Training           ⏳ BLOCKED (chờ Phase 5)
 [ ] Phase 7 — Ablation Study & Visualization  ⏳ BLOCKED (chờ Phase 6)
 [ ] Phase 8 — Cross-Dataset & Robustness Evaluation  ⏳ BLOCKED (chờ Phase 7)
@@ -29,11 +29,27 @@
 ## Next Task
 
 ```
-T4.1 — Chuẩn bị Reference Points + ImplicitTopologySampler forward
+T5.1 — Verification MLP integration tests + hard-negative mining wiring
 ```
 
-**File**: `models/heads/implicit_topo.py`  
-**Gate**: Test T4.A shape `(B, N, 256)` + T4.B gradient flow (cần MMCV CUDA trên server).
+**File**: `models/heads/verification.py`, `losses/infonce_loss.py`  
+**Gate**: Test T5.A shape + T5.B InfoNCE convergence.
+
+---
+
+## Completed — Phase 4: Implicit Topology Sampler
+
+| Task | File | Status |
+|---|---|---|
+| T4.1 Reference points + batch padding | `models/heads/implicit_topo.py` | ✅ |
+| T4.2/T4.3 MultiScaleDeformableAttention | `models/heads/implicit_topo.py` | ✅ |
+| T4.4 Unit tests | `tests/test_phase4.py` | ✅ |
+
+**Outputs**:
+- `zi: (B, N, 256)` topology embeddings via deformable attention over P4/P5
+- MMCV CUDA on GPU server; pure-PyTorch fallback on dev (no mmcv)
+
+**Gate PASSED**: `tests/test_phase4.py` — T4.A + T4.B + integration.
 
 ---
 
@@ -73,10 +89,10 @@ T4.1 — Chuẩn bị Reference Points + ImplicitTopologySampler forward
 
 ```bash
 cd ~/SDO/ttld-net && conda activate ttld-net
-python -m pytest tests/test_phase3.py tests/test_phase2.py -v
+python -m pytest tests/test_phase4.py tests/test_phase3.py tests/test_phase2.py -v
 python scripts/probe_backbone_channels.py --height 640 --width 640
 ```
 
 ---
 
-*Cập nhật 2026-07-20: Phase 3 hoàn thành — SemanticContextBranch wired vào TTLDNet.*
+*Cập nhật 2026-07-20: Phase 4 hoàn thành — ImplicitTopologySampler wired vào TTLDNet (mode topology/full).*

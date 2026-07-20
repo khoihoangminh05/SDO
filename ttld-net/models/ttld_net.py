@@ -8,7 +8,10 @@ import torch
 import torch.nn as nn
 
 from models.backbones.yolo26 import YOLO26Backbone
-from models.heads.implicit_topo import ImplicitTopologySampler
+from models.heads.implicit_topo import (
+    ImplicitTopologySampler,
+    build_reference_points_batch,
+)
 from models.heads.tiny_generator import TinyGenerator
 from models.heads.verification import VerificationMLP
 from models.necks.context_branch import SemanticContextBranch
@@ -30,7 +33,13 @@ class TTLDNet(nn.Module):
             fcand_dim=256,
         )
         self.context_branch = SemanticContextBranch(c4=256, c5=256, c_cand=256)
-        self.topo_sampler = ImplicitTopologySampler()
+        topo_cfg = cfg.raw.get("topology", {}) if cfg.raw else {}
+        self.topo_sampler = ImplicitTopologySampler(
+            d_model=int(topo_cfg.get("d_model", 256)),
+            n_heads=int(topo_cfg.get("n_heads", 8)),
+            n_points=int(topo_cfg.get("n_points", 4)),
+            num_levels=2,
+        )
         self.verifier = VerificationMLP()
         self._stack_ready = False
 
@@ -93,13 +102,15 @@ class TTLDNet(nn.Module):
         if self.cfg.model.mode in {"shallow", "shallow_focal", "baseline"}:
             return outputs
 
-        from models.heads.implicit_topo import extract_reference_points
-
-        batch_pq = []
-        for image_candidates in stage1["candidates"]:
-            batch_pq.append(extract_reference_points(image_candidates))
-        pq = torch.stack(batch_pq, dim=0) if batch_pq else torch.zeros(0)
         fcand = context["fcand_proj"] if context["fcand_proj"] is not None else stage1["fcand"]
+        image_size = self.cfg.data.image_size
+        pq = build_reference_points_batch(
+            stage1["candidates"],
+            image_size=image_size,
+            max_n=fcand.shape[1],
+            device=fcand.device,
+            dtype=fcand.dtype,
+        )
         zi = self.topo_sampler(fcand, [context["fctx_p4"], context["fctx_p5"]], pq)
         p_valid = self.verifier(fcand, zi)
 
