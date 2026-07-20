@@ -17,6 +17,28 @@ TRAIN_YAML = REPO / "apps/worker/datasets/dataset_train_rgb/train.yaml"
 SKIP_NO_DATA = not TRAIN_YAML.is_file()
 
 
+def test_yolo_dir_dataset_and_fallback(tmp_path: Path) -> None:
+    """Val split can load from rgb/val PNG+TXT when val.yaml is absent."""
+    from PIL import Image
+
+    from data.dataset import YoloDirDataset, resolve_dataset_path
+
+    img_dir = tmp_path / "rgb" / "val"
+    img_dir.mkdir(parents=True)
+    Image.new("RGB", (1280, 720), color=(0, 0, 0)).save(img_dir / "frame.png")
+    (img_dir / "frame.txt").write_text("2 0.5 0.5 0.05 0.05\n", encoding="utf-8")
+
+    resolved, mode = resolve_dataset_path(tmp_path / "val.yaml")
+    assert mode == "yolo_dir"
+    assert resolved == img_dir.resolve()
+
+    dataset = YoloDirDataset(resolved)
+    image, boxes = dataset[0]
+    assert image.shape == (3, 720, 1280)
+    assert boxes.shape[1] == 5
+    assert boxes[0, 4] == 0.0  # yolo green -> TTLD Green
+
+
 @pytest.mark.skipif(SKIP_NO_DATA, reason="BSTLD train.yaml not found")
 def test_dataloader_smoke() -> None:
     """T1.A — DataLoader shape and box format."""

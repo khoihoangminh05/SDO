@@ -25,7 +25,7 @@ loss:
 data:
   ultralytics_yaml: ../apps/worker/datasets/bstld.yaml
   train_yaml: ../apps/worker/datasets/dataset_train_rgb/train.yaml
-  val_yaml: ../apps/worker/datasets/dataset_val_sample/val.yaml
+  val_yaml: ../apps/worker/datasets/dataset_val_sample/rgb/val
   conf_threshold: 0.05
   soft_nms_sigma: 0.5
   eval_conf_threshold: 0.5

@@ -24,6 +24,101 @@ CLASS_MAPPING: dict[str, int] = {
 
 CLASS_NAMES: list[str] = ["Green", "Yellow", "Red", "Off"]
 
+# Ultralytics BSTLD labels: red=0, yellow=1, green=2, off=3
+YOLO_TO_TTLD_CLASS: dict[int, int] = {0: 2, 1: 1, 2: 0, 3: 3}
+
+
+def resolve_dataset_path(path: str | Path) -> tuple[Path, str]:
+    """
+    Resolve train/val source to either Bosch YAML or YOLO image directory.
+
+    Returns:
+        (resolved_path, mode) where mode is ``yaml`` or ``yolo_dir``.
+    """
+    from utils.config import resolve_path
+
+    candidate = resolve_path(str(path))
+    if candidate.is_file():
+        return candidate, "yaml"
+    if candidate.is_dir():
+        return candidate, "yolo_dir"
+
+    # Common layout: val.yaml missing but rgb/val/*.png exists (sample_val.py)
+    fallbacks = [
+        candidate.parent / "rgb" / "val",
+        candidate.parent / "rgb" / "train",
+        candidate.parent.parent / "rgb" / "val",
+    ]
+    for fallback in fallbacks:
+        if fallback.is_dir() and any(fallback.glob("**/*.png")):
+            return fallback.resolve(), "yolo_dir"
+
+    raise FileNotFoundError(
+        f"Dataset not found: {candidate}. "
+        "Expected Bosch YAML file or directory of PNG+TXT (YOLO format). "
+        "Val split often lives at apps/worker/datasets/dataset_val_sample/rgb/val"
+    )
+
+
+class YoloDirDataset(Dataset):
+    """Load BSTLD images with sidecar YOLO .txt labels (val sample layout)."""
+
+    def __init__(
+        self,
+        image_dir: str | Path,
+        transform: Callable[..., Any] | None = None,
+        image_width: int = 1280,
+        image_height: int = 720,
+    ) -> None:
+        self.image_dir = Path(image_dir)
+        self.transform = transform
+        self.image_width = image_width
+        self.image_height = image_height
+        self.samples = sorted(self.image_dir.glob("**/*.png"))
+        if not self.samples:
+            raise FileNotFoundError(f"No PNG images under {self.image_dir}")
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        from PIL import Image
+
+        image_path = self.samples[idx]
+        try:
+            image = Image.open(image_path).convert("RGB")
+        except OSError as exc:
+            raise RuntimeError(f"Corrupt image: {image_path}") from exc
+
+        boxes = self._load_yolo_labels(image_path.with_suffix(".txt"))
+        if self.transform is not None:
+            image, boxes = self.transform(image, boxes)
+        elif not isinstance(image, torch.Tensor):
+            image = torch.from_numpy(__import__("numpy").array(image)).permute(2, 0, 1).float() / 255.0
+
+        return image, boxes
+
+    def _load_yolo_labels(self, label_path: Path) -> torch.Tensor:
+        if not label_path.is_file():
+            return torch.zeros((0, 5), dtype=torch.float32)
+
+        parsed: list[list[float]] = []
+        for line in label_path.read_text(encoding="utf-8").splitlines():
+            parts = line.strip().split()
+            if len(parts) < 5:
+                continue
+            yolo_cls = int(float(parts[0]))
+            cx = float(parts[1]) * self.image_width
+            cy = float(parts[2]) * self.image_height
+            bw = float(parts[3]) * self.image_width
+            bh = float(parts[4]) * self.image_height
+            cls_id = YOLO_TO_TTLD_CLASS.get(yolo_cls, 3)
+            parsed.append([cx, cy, bw, bh, float(cls_id)])
+
+        if not parsed:
+            return torch.zeros((0, 5), dtype=torch.float32)
+        return torch.tensor(parsed, dtype=torch.float32)
+
 
 class BoschDataset(Dataset):
     """Dataset for Bosch YAML labels with 4-class TTLD mapping."""
@@ -139,14 +234,19 @@ def create_dataloader(
     images_root: str | Path | None = None,
     split: str = "train",
 ) -> DataLoader:
-    """Factory for Bosch DataLoader with custom collate."""
+    """Factory for Bosch YAML or YOLO-directory DataLoader with custom collate."""
     from data.transforms import get_train_transforms, get_val_transforms
 
-    yaml_path = Path(yaml_path)
-    root = Path(images_root) if images_root else yaml_path.parent
+    resolved, mode = resolve_dataset_path(yaml_path)
     if transform is None:
         transform = get_train_transforms() if split == "train" else get_val_transforms()
-    dataset = BoschDataset(yaml_path, transform=transform, images_root=root)
+
+    if mode == "yaml":
+        root = Path(images_root) if images_root else resolved.parent
+        dataset: Dataset = BoschDataset(resolved, transform=transform, images_root=root)
+    else:
+        dataset = YoloDirDataset(resolved, transform=transform)
+
     return DataLoader(
         dataset,
         batch_size=batch_size,
