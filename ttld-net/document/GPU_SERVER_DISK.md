@@ -83,4 +83,34 @@ python scripts/install_mmcv.py --run
 ```bash
 python -c "import torch; print(torch.cuda.is_available(), torch.__version__)"
 python -c "from mmcv.ops import MultiScaleDeformableAttention; print('MMCV OK')"
+python scripts/check_numpy_torch.py
+```
+
+---
+
+## Polars SIGILL / Illegal instruction
+
+```
+The following required CPU features were not detected: avx, avx2, ...
+Illegal instruction (core dumped)
+```
+
+Ultralytics dùng `polars` — bản mặc định cần AVX2. CPU server cũ hoặc VM không có → crash.
+
+```bash
+conda activate ttld-net
+pip uninstall polars polars-runtime-32 -y
+pip install 'polars[rtcompat]>=0.20.0'
+python -c "import polars as pl; print(pl.__version__, pl.DataFrame({'a':[1]}))"
+```
+
+## NumPy + PyTorch mismatch
+
+```
+RuntimeError: Numpy is not available
+```
+
+```bash
+pip install "numpy>=1.23.5,<2.0" --force-reinstall
+python scripts/check_numpy_torch.py
 ```

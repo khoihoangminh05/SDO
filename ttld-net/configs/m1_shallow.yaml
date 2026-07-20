@@ -18,8 +18,8 @@ training:
 loss:
   lambda1: 0.0
   lambda2: 0.0
-  focal_gamma: 2.0
-  focal_alpha: 0.25
+  focal_gamma: 1.5
+  focal_alpha: 0.75
 
 data:
   ultralytics_yaml: ../apps/worker/datasets/bstld.yaml

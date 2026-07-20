@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 
 from utils.config import load_config, resolve_path
 from utils.metrics import save_metrics
-from utils.yolo_baseline import evaluate_baseline
+from utils.yolo_baseline import evaluate_baseline, evaluate_high_recall
 
 
 def parse_args() -> argparse.Namespace:
@@ -37,14 +37,17 @@ def main() -> None:
 
     if cfg.model.mode == "baseline":
         metrics = evaluate_baseline(weights, cfg, conf=args.conf, device=device)
-        save_metrics(metrics, args.output)
-        print("Evaluation metrics:")
-        for key, value in metrics.items():
-            print(f"  {key}: {value}")
-        print(f"\nSaved: {args.output}")
-        return
+    elif cfg.model.mode in {"shallow", "shallow_focal"}:
+        # Phase 2 interim: reuse M0 weights at Stage-1 conf (0.05)
+        metrics = evaluate_high_recall(weights, cfg, conf=args.conf, device=device)
+    else:
+        raise NotImplementedError(f"Evaluation mode '{cfg.model.mode}' not implemented yet.")
 
-    raise NotImplementedError(f"Evaluation mode '{cfg.model.mode}' not implemented yet.")
+    save_metrics(metrics, args.output)
+    print("Evaluation metrics:")
+    for key, value in metrics.items():
+        print(f"  {key}: {value}")
+    print(f"\nSaved: {args.output}")
 
 
 if __name__ == "__main__":

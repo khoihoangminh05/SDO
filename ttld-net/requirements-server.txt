@@ -1,7 +1,7 @@
 # Server-only deps — torch/torchvision installed via conda (NOT pip)
 # Usage: pip install -r requirements-server.txt
 
-numpy>=1.24.0
+numpy>=1.23.5,<2.0
 pyyaml>=6.0
 pillow>=10.0.0
 opencv-python-headless>=4.8.0
@@ -11,3 +11,5 @@ tqdm>=4.65.0
 pytest>=8.0.0
 setuptools>=65.0.0
 ultralytics>=8.0.0
+# Ultralytics pulls polars — use rtcompat on older CPUs (no AVX2)
+polars[rtcompat]>=0.20.0

@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from utils.config import TTLDConfig, repo_root, resolve_path
+from utils.preflight import verify_ultralytics_runtime
 
 
 def prepare_ultralytics_yaml(ultralytics_yaml: Path, output_path: Path | None = None) -> Path:
@@ -49,6 +50,8 @@ def train_baseline(cfg: TTLDConfig, output_dir: Path, device: str | int = 0) -> 
     """
     from ultralytics import YOLO
 
+    verify_ultralytics_runtime()
+
     data_yaml = prepare_ultralytics_yaml(resolve_path(cfg.data.ultralytics_yaml))
     weights = _resolve_weights(cfg)
     imgsz = int(cfg.raw.get("training", {}).get("imgsz", 1280))
@@ -88,6 +91,8 @@ def evaluate_baseline(
     """Run Ultralytics val and extract Phase 1 metrics."""
     from ultralytics import YOLO
 
+    verify_ultralytics_runtime()
+
     data_yaml = prepare_ultralytics_yaml(resolve_path(cfg.data.ultralytics_yaml))
     eval_conf = conf if conf is not None else cfg.data.eval_conf_threshold
     imgsz = int(cfg.raw.get("training", {}).get("imgsz", 1280))
@@ -103,6 +108,46 @@ def evaluate_baseline(
     )
 
     return extract_ultralytics_metrics(results)
+
+
+def evaluate_high_recall(
+    weights: Path,
+    cfg: TTLDConfig,
+    conf: float | None = None,
+    device: str | int = 0,
+) -> dict[str, float]:
+    """
+    Phase 2 interim M1 metric: same YOLO weights, Stage-1 conf (default 0.05).
+
+    Measures how much recall rises when we keep low-confidence tiny boxes.
+    Soft-NMS is applied inside Ultralytics via a high IoU threshold so nearby
+    lights are not wiped by hard NMS.
+    """
+    from ultralytics import YOLO
+
+    verify_ultralytics_runtime()
+
+    data_yaml = prepare_ultralytics_yaml(resolve_path(cfg.data.ultralytics_yaml))
+    eval_conf = conf if conf is not None else cfg.data.conf_threshold
+    imgsz = int(cfg.raw.get("training", {}).get("imgsz", 1280))
+    soft_sigma = float(cfg.data.soft_nms_sigma)
+
+    model = YOLO(str(weights))
+    # High IoU thresh ≈ soft keep; max_det raised for dense tiny lights
+    results = model.val(
+        data=str(data_yaml),
+        split="val",
+        imgsz=imgsz,
+        conf=eval_conf,
+        iou=max(0.7, 1.0 - soft_sigma),
+        max_det=2000,
+        device=device,
+        verbose=False,
+    )
+    metrics = extract_ultralytics_metrics(results)
+    metrics["eval_conf"] = float(eval_conf)
+    metrics["mode"] = "high_recall_m1"
+    return metrics
 
 
 def extract_ultralytics_metrics(results: Any) -> dict[str, float]:
