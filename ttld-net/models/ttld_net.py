@@ -119,7 +119,9 @@ class TTLDNet(nn.Module):
         outputs["zi"] = zi
 
         if self.cfg.model.mode == "full":
-            outputs["p_valid"] = self.verifier(fcand, zi)
+            valid_logits = self.verifier(fcand, zi)
+            outputs["valid_logits"] = valid_logits
+            outputs["p_valid"] = torch.sigmoid(valid_logits)
 
         return outputs
 
@@ -168,8 +170,8 @@ class TTLDNet(nn.Module):
         labels = labels.to(device)
         confidences = confidences.to(device)
 
-        if "p_valid" in outputs and self.cfg.loss.lambda2 > 0:
-            loss_verify = verification_bce_loss(outputs["p_valid"], labels)
+        if "valid_logits" in outputs and self.cfg.loss.lambda2 > 0:
+            loss_verify = verification_bce_loss(outputs["valid_logits"], labels)
             losses["verify"] = loss_verify
             total = total + self.cfg.loss.lambda2 * loss_verify
 

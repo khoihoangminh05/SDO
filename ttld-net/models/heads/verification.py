@@ -22,7 +22,6 @@ class VerificationMLP(nn.Module):
             nn.Linear(hidden_dim, hidden_dim // 2),
             nn.ReLU(),
             nn.Linear(hidden_dim // 2, 1),
-            nn.Sigmoid(),
         )
 
     def forward(self, fcand: torch.Tensor, zi: torch.Tensor) -> torch.Tensor:
@@ -228,9 +227,9 @@ def prepare_infonce_tensors(
     return torch.stack(anchors), torch.stack(positives), torch.stack(negatives)
 
 
-def verification_bce_loss(p_valid: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-    """Binary cross-entropy over valid (non-padding) candidate slots."""
-    preds = p_valid.squeeze(-1)
+def verification_bce_loss(valid_logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    """BCE over valid (non-padding) candidate slots; logits are AMP-safe."""
+    preds = valid_logits.squeeze(-1)
     if labels.shape != preds.shape:
         if labels.dim() == 1 and preds.dim() == 2 and labels.shape[0] == preds.shape[1]:
             labels = labels.unsqueeze(0).expand_as(preds)
@@ -239,9 +238,9 @@ def verification_bce_loss(p_valid: torch.Tensor, labels: torch.Tensor) -> torch.
 
     valid_mask = labels >= 0
     if not valid_mask.any():
-        return p_valid.new_zeros(())
+        return valid_logits.new_zeros(())
 
-    return F.binary_cross_entropy(preds[valid_mask], labels[valid_mask])
+    return F.binary_cross_entropy_with_logits(preds[valid_mask], labels[valid_mask])
 
 
 def compute_topology_loss(

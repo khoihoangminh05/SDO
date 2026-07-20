@@ -38,7 +38,8 @@ def test_verification_mlp_shape() -> None:
     mlp = VerificationMLP()
     fcand = torch.randn(2, 10, 256)
     zi = torch.randn(2, 10, 256)
-    p_valid = mlp(fcand, zi)
+    p_logits = mlp(fcand, zi)
+    p_valid = torch.sigmoid(p_logits)
     assert p_valid.shape == (2, 10, 1)
     assert (p_valid >= 0).all() and (p_valid <= 1).all()
 

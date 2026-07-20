@@ -25,7 +25,8 @@ def test_verification_mlp_shape() -> None:
     fcand = torch.randn(2, 10, 256)
     zi = torch.randn(2, 10, 256)
 
-    p_valid = mlp(fcand, zi)
+    p_logits = mlp(fcand, zi)
+    p_valid = torch.sigmoid(p_logits)
     assert p_valid.shape == (2, 10, 1), f"Shape sai: {p_valid.shape}"
     assert (p_valid >= 0).all() and (p_valid <= 1).all()
 
@@ -114,9 +115,9 @@ def test_verification_bce_loss_ignores_padding() -> None:
     """BCE loss skips padded candidate slots (label == -1)."""
     from models.heads.verification import verification_bce_loss
 
-    p_valid = torch.tensor([[[0.9], [0.1], [0.5]]])
+    p_logits = torch.tensor([[[2.0], [-2.0], [0.0]]])
     labels = torch.tensor([[1.0, 0.0, -1.0]])
-    loss = verification_bce_loss(p_valid, labels)
+    loss = verification_bce_loss(p_logits, labels)
     assert loss.ndim == 0
     assert not torch.isnan(loss)
 
