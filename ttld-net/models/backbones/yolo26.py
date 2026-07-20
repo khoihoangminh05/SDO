@@ -61,6 +61,7 @@ class YOLO26Backbone(nn.Module):
         if self.weights is not None and self.weights.is_file():
             yolo = YOLO(str(self.weights))
         self._impl = yolo.model
+        self._impl.eval()
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, ...]:
         """
@@ -72,6 +73,12 @@ class YOLO26Backbone(nn.Module):
         """
         self._lazy_init()
         assert self._impl is not None
+        # Ultralytics lazily initializes on CPU. Ensure weights are on the
+        # same device as the incoming tensor to avoid:
+        # "Input type (CUDA) and weight type (CPU) should be the same"
+        impl_device = next(self._impl.parameters(), torch.empty(0)).device
+        if impl_device != x.device:
+            self._impl.to(x.device)
         layers = self._impl.model
         save = set(getattr(self._impl, "save", [])) | self._save_indices
 
