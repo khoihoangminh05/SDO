@@ -61,7 +61,6 @@ class YOLO26Backbone(nn.Module):
         if self.weights is not None and self.weights.is_file():
             yolo = YOLO(str(self.weights))
         self._impl = yolo.model
-        self._impl.eval()
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, ...]:
         """

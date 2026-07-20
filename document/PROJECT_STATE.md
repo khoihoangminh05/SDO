@@ -6,7 +6,7 @@
 
 ---
 
-## Current Phase: 5 — Verification & Contrastive Learning
+## Current Phase: 7 — Ablation Study & Visualization
 
 ---
 
@@ -18,9 +18,9 @@
 [x] Phase 2 — High-Recall Candidate Generator  ✅ COMPLETED
 [x] Phase 3 — Semantic Context Branch       ✅ COMPLETED
 [x] Phase 4 — Implicit Topology Sampler     ✅ COMPLETED
-[ ] Phase 5 — Verification & Contrastive    🔄 IN PROGRESS  ← ĐANG Ở ĐÂY
-[ ] Phase 6 — End-to-End Training           ⏳ BLOCKED (chờ Phase 5)
-[ ] Phase 7 — Ablation Study & Visualization  ⏳ BLOCKED (chờ Phase 6)
+[x] Phase 5 — Verification & Contrastive    ✅ COMPLETED
+[x] Phase 6 — End-to-End Training           ✅ COMPLETED
+[ ] Phase 7 — Ablation Study & Visualization  🔄 IN PROGRESS  ← ĐANG Ở ĐÂY
 [ ] Phase 8 — Cross-Dataset & Robustness Evaluation  ⏳ BLOCKED (chờ Phase 7)
 ```
 
@@ -29,11 +29,41 @@
 ## Next Task
 
 ```
-T5.1 — Verification MLP integration tests + hard-negative mining wiring
+T7.1 — scripts/run_ablation.py + compare_ablation.py
 ```
 
-**File**: `models/heads/verification.py`, `losses/infonce_loss.py`  
-**Gate**: Test T5.A shape + T5.B InfoNCE convergence.
+**Gate**: 5 ablation configs M0–M4 chạy được, metrics JSON xuất ra `results/ablation/`.
+
+---
+
+## Completed — Phase 6: End-to-End Training
+
+| Task | File | Status |
+|---|---|---|
+| T6.1 Training loop | `utils/trainer.py`, `train.py` | ✅ |
+| T6.2 Loss combination | `models/ttld_net.py`, `losses/detection_loss.py` | ✅ |
+| T6.3 TensorBoard logging | `utils/trainer.py` | ✅ |
+| T6.4 Evaluation | `test.py`, `utils/metrics.py` | ✅ |
+
+**Loss**: `L_total = L_det + λ1·L_topology + λ2·L_verify`
+
+**Gate PASSED**: `tests/test_phase6.py` — T6.A + T6.B smoke.
+
+**Train trên GPU server** (xem hướng dẫn bên dưới).
+
+---
+
+## Completed — Phase 5: Verification & Contrastive Learning
+
+| Task | File | Status |
+|---|---|---|
+| T5.1 VerificationMLP | `models/heads/verification.py` | ✅ |
+| T5.2 InfoNCE Loss | `losses/infonce_loss.py` | ✅ |
+| T5.3 Hard-negative mining + GT matching | `models/heads/verification.py` | ✅ |
+| T5.4 Positive pair builder | `models/heads/verification.py` | ✅ |
+| Loss wiring | `models/ttld_net.py` (`compute_losses`) | ✅ |
+
+**Gate PASSED**: `tests/test_phase5.py` — T5.A + T5.B + integration.
 
 ---
 
@@ -89,10 +119,32 @@ T5.1 — Verification MLP integration tests + hard-negative mining wiring
 
 ```bash
 cd ~/SDO/ttld-net && conda activate ttld-net
-python -m pytest tests/test_phase4.py tests/test_phase3.py tests/test_phase2.py -v
-python scripts/probe_backbone_channels.py --height 640 --width 640
+python -m pytest tests/test_phase6.py tests/test_phase5.py tests/test_phase4.py -v
 ```
+
+### Train full model trên GPU server (bạn thao tác)
+
+```bash
+cd ~/SDO/ttld-net && conda activate ttld-net
+
+# Smoke test (vài step, kiểm tra pipeline)
+python train.py --config configs/m4_full_ttld.yaml \
+  --output logs/ablation/m4_full_ttld \
+  --device 0 --max-steps 10
+
+# Train đầy đủ (~100 epoch, cần RTX 4090 / tương đương)
+python train.py --config configs/m4_full_ttld.yaml \
+  --output logs/ablation/m4_full_ttld \
+  --device 0
+
+# Evaluate
+python test.py --config configs/m4_full_ttld.yaml \
+  --weights checkpoints/m4_full_ttld_best.pth \
+  --output results/ablation/m4_full_ttld_metrics.json
+```
+
+TensorBoard: `tensorboard --logdir logs/ablation/m4_full_ttld/tensorboard`
 
 ---
 
-*Cập nhật 2026-07-20: Phase 4 hoàn thành — ImplicitTopologySampler wired vào TTLDNet (mode topology/full).*
+*Cập nhật 2026-07-20: Phase 6 hoàn thành — train.py + trainer + L_det wired.*

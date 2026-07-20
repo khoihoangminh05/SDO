@@ -13,6 +13,7 @@ from models.heads.implicit_topo import (
     build_reference_points_batch,
 )
 from models.heads.tiny_generator import TinyGenerator
+from losses.infonce_loss import InfoNCELoss
 from models.heads.verification import VerificationMLP
 from models.necks.context_branch import SemanticContextBranch
 from models.necks.fpn_panet import FPNPANet
@@ -65,10 +66,12 @@ class TTLDNet(nn.Module):
         self._ensure_stack(images.device, (h, w))
         pyramids = self.backbone(images)
         p1, p2, p3, p4, p5 = self.neck(pyramids)
-        candidates, fcand = self.generator(p1, p2, p3)
+        gen_out = self.generator(p1, p2, p3, return_raw=True)
+        candidates, fcand, raw_outputs = gen_out
         return {
             "candidates": candidates,
             "fcand": fcand,
+            "raw_outputs": raw_outputs,
             "p4": p4,
             "p5": p5,
         }
@@ -112,17 +115,76 @@ class TTLDNet(nn.Module):
             dtype=fcand.dtype,
         )
         zi = self.topo_sampler(fcand, [context["fctx_p4"], context["fctx_p5"]], pq)
-        p_valid = self.verifier(fcand, zi)
-
         outputs["zi"] = zi
-        outputs["p_valid"] = p_valid
+
+        if self.cfg.model.mode == "full":
+            outputs["p_valid"] = self.verifier(fcand, zi)
+
         return outputs
 
     def compute_losses(
         self,
         outputs: dict[str, Any],
         targets: list[torch.Tensor],
-        loss_fns: dict[str, nn.Module],
+        loss_fns: dict[str, nn.Module] | None = None,
     ) -> dict[str, torch.Tensor]:
-        """Combine L_det + lambda1*L_topology + lambda2*L_verify (Phase 6)."""
-        raise NotImplementedError("Phase 6: implement multi-task loss combination.")
+        """
+        Phase 6: L_det + λ1·L_topology + λ2·L_verify.
+
+        Uses ``lambda1`` / ``lambda2`` from config to weight contrastive and
+        verification losses.
+        """
+        from losses.detection_loss import DetectionLoss
+        from models.heads.verification import (
+            compute_topology_loss,
+            label_candidates_batch,
+            verification_bce_loss,
+        )
+
+        loss_fns = loss_fns or {}
+        losses: dict[str, torch.Tensor] = {}
+        total = outputs["fcand"].new_zeros(())
+
+        det_fn = loss_fns.get("detection")
+        if det_fn is None:
+            det_fn = DetectionLoss(
+                gamma=self.cfg.loss.focal_gamma,
+                alpha=self.cfg.loss.focal_alpha,
+            )
+        if outputs.get("raw_outputs"):
+            loss_det = det_fn(outputs["raw_outputs"], targets)
+            losses["det"] = loss_det
+            total = total + loss_det
+
+        max_n = outputs["fcand"].shape[1]
+        labels, confidences = label_candidates_batch(
+            outputs["candidates"],
+            targets,
+            max_n=max_n,
+            iou_threshold=0.5,
+        )
+        device = outputs["fcand"].device
+        labels = labels.to(device)
+        confidences = confidences.to(device)
+
+        if "p_valid" in outputs and self.cfg.loss.lambda2 > 0:
+            loss_verify = verification_bce_loss(outputs["p_valid"], labels)
+            losses["verify"] = loss_verify
+            total = total + self.cfg.loss.lambda2 * loss_verify
+
+        if "zi" in outputs and self.cfg.loss.lambda1 > 0:
+            infonce = loss_fns.get("infonce")
+            if infonce is None:
+                infonce = InfoNCELoss(temperature=self.cfg.loss.infonce_temperature).to(device)
+            loss_topo = compute_topology_loss(
+                outputs["zi"],
+                labels,
+                confidences,
+                infonce,
+                n_hard=self.cfg.loss.n_hard_negatives,
+            )
+            losses["topology"] = loss_topo
+            total = total + self.cfg.loss.lambda1 * loss_topo
+
+        losses["total"] = total
+        return losses

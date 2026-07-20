@@ -79,7 +79,11 @@ class TinyGenerator(nn.Module):
         p1: torch.Tensor,
         p2: torch.Tensor,
         p3: torch.Tensor,
-    ) -> tuple[list[list[dict[str, Any]]], torch.Tensor]:
+        *,
+        return_raw: bool = False,
+    ) -> tuple[list[list[dict[str, Any]]], torch.Tensor] | tuple[
+        list[list[dict[str, Any]]], torch.Tensor, list[dict[str, Any]]
+    ]:
         """
         Args:
             p1, p2, p3: Shallow feature maps from backbone/neck.
@@ -87,6 +91,7 @@ class TinyGenerator(nn.Module):
         Returns:
             candidates: per-image list of dicts with bbox, confidence, class_id.
             fcand: (B, N, 256) local features per candidate (N = max over batch).
+            raw_outputs: optional per-scale head logits for L_det training.
         """
         features = (p1, p2, p3)
         batch_size = p1.shape[0]
@@ -94,9 +99,14 @@ class TinyGenerator(nn.Module):
 
         per_image: list[list[dict[str, Any]]] = [[] for _ in range(batch_size)]
         per_image_feats: list[list[torch.Tensor]] = [[] for _ in range(batch_size)]
+        raw_outputs: list[dict[str, Any]] = []
 
         for head, feat, stride in zip(self.heads, features, self.strides):
             obj, cls, box, emb = head(feat)
+            if return_raw:
+                raw_outputs.append(
+                    {"obj": obj, "cls": cls, "box": box, "stride": stride}
+                )
             self._decode_scale(
                 obj, cls, box, emb, stride, per_image, per_image_feats
             )
@@ -119,6 +129,8 @@ class TinyGenerator(nn.Module):
             n = min(feats.shape[0], max_n)
             fcand[b, :n] = self.feature_proj(feats[:n])
 
+        if return_raw:
+            return candidates, fcand, raw_outputs
         return candidates, fcand
 
     def _decode_scale(
