@@ -32,6 +32,7 @@ class TTLDNet(nn.Module):
             conf_threshold=cfg.data.conf_threshold,
             soft_nms_sigma=cfg.data.soft_nms_sigma,
             fcand_dim=256,
+            max_candidates=cfg.training.max_candidates,
         )
         self.context_branch = SemanticContextBranch(c4=256, c5=256, c_cand=256)
         topo_cfg = cfg.raw.get("topology", {}) if cfg.raw else {}

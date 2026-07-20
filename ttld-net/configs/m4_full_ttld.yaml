@@ -13,7 +13,10 @@ model:
 
 training:
   epochs: 100
-  batch_size: 32
+  batch_size: 4          # 720x1280 + full TTLD needs ~8-16GB; raise if VRAM allows
+  val_batch_size: 2
+  max_candidates: 400
+  use_amp: true
   optimizer: AdamW
   lr: 1.0e-4
   scheduler: CosineAnnealing

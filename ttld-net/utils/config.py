@@ -26,7 +26,10 @@ class TrainingConfig:
     """Training hyperparameters."""
 
     epochs: int = 100
-    batch_size: int = 32
+    batch_size: int = 4
+    val_batch_size: int = 2
+    max_candidates: int = 400
+    use_amp: bool = True
     optimizer: str = "AdamW"
     lr: float = 1e-4
     scheduler: str = "CosineAnnealing"

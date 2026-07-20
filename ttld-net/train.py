@@ -24,12 +24,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", default=None, help="Optional checkpoint to resume")
     parser.add_argument("--max-epochs", type=int, default=None, help="Override training.epochs")
     parser.add_argument("--max-steps", type=int, default=None, help="Stop after N optimizer steps (smoke test)")
+    parser.add_argument("--batch-size", type=int, default=None, help="Override training.batch_size")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     cfg = load_config(args.config)
+    if args.batch_size is not None:
+        cfg.training.batch_size = args.batch_size
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     config_path = Path(args.config)

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import gc
 import math
 import shutil
+from contextlib import nullcontext
 from pathlib import Path
-from typing import Any
 
 import torch
 import torch.nn as nn
@@ -64,6 +65,12 @@ def _save_checkpoint(
     )
 
 
+def _autocast_context(device: torch.device, enabled: bool):
+    if enabled and device.type == "cuda":
+        return torch.autocast(device_type="cuda", dtype=torch.float16)
+    return nullcontext()
+
+
 def train_ttld(
     cfg: TTLDConfig,
     output_dir: Path,
@@ -84,6 +91,10 @@ def train_ttld(
         device = int(device)
     torch_device = torch.device(f"cuda:{device}" if device != "cpu" else "cpu")
 
+    if torch_device.type == "cuda":
+        torch.cuda.empty_cache()
+        gc.collect()
+
     model = TTLDNet(cfg).to(torch_device)
     if resume:
         state = torch.load(resume, map_location=torch_device, weights_only=False)
@@ -91,6 +102,7 @@ def train_ttld(
 
     train_yaml = resolve_path(cfg.data.train_yaml)
     val_yaml = resolve_path(cfg.data.val_yaml)
+    val_batch_size = getattr(cfg.training, "val_batch_size", None) or min(cfg.training.batch_size, 2)
 
     train_loader = create_dataloader(
         train_yaml,
@@ -102,7 +114,7 @@ def train_ttld(
     )
     val_loader = create_dataloader(
         val_yaml,
-        batch_size=cfg.training.batch_size,
+        batch_size=val_batch_size,
         num_workers=cfg.data.num_workers,
         shuffle=False,
         pin_memory=cfg.data.pin_memory and torch_device.type == "cuda",
@@ -111,6 +123,8 @@ def train_ttld(
 
     optimizer = AdamW(model.parameters(), lr=cfg.training.lr, weight_decay=1e-4)
     scheduler = build_scheduler(optimizer, cfg)
+    use_amp = bool(getattr(cfg.training, "use_amp", True)) and torch_device.type == "cuda"
+    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
 
     loss_fns: dict[str, nn.Module] = {
         "detection": DetectionLoss(
@@ -135,6 +149,12 @@ def train_ttld(
 
     use_verifier = cfg.model.mode == "full"
 
+    print(
+        f"Training on {torch_device} | batch_size={cfg.training.batch_size} | "
+        f"val_batch_size={val_batch_size} | max_candidates={model.generator.max_candidates} | "
+        f"amp={use_amp}"
+    )
+
     for epoch in range(epochs):
         model.train()
         epoch_losses: dict[str, float] = {}
@@ -143,19 +163,22 @@ def train_ttld(
             if max_steps is not None and global_step >= max_steps:
                 break
 
-            images = images.to(torch_device)
+            images = images.to(torch_device, non_blocking=True)
             targets = [t.to(torch_device) for t in targets]
 
-            outputs = model(images)
-            losses = model.compute_losses(outputs, targets, loss_fns)
-
             optimizer.zero_grad(set_to_none=True)
-            losses["total"].backward()
+            with _autocast_context(torch_device, use_amp):
+                outputs = model(images)
+                losses = model.compute_losses(outputs, targets, loss_fns)
+
+            scaler.scale(losses["total"]).backward()
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(
                 model.parameters(),
                 max_norm=cfg.training.grad_clip_norm,
             )
-            optimizer.step()
+            scaler.step(optimizer)
+            scaler.update()
 
             global_step += 1
             for key, value in losses.items():
@@ -165,6 +188,8 @@ def train_ttld(
             for key in ("det", "topology", "verify"):
                 if key in losses:
                     writer.add_scalar(f"Loss/{key}", float(losses[key]), global_step)
+
+            del outputs, losses
 
             if max_steps is not None and global_step >= max_steps:
                 break
@@ -177,6 +202,9 @@ def train_ttld(
             num_steps = min(num_steps, max_steps)
         for key, total_val in epoch_losses.items():
             writer.add_scalar(f"Epoch/{key}", total_val / num_steps, epoch)
+
+        if torch_device.type == "cuda":
+            torch.cuda.empty_cache()
 
         val_metrics = evaluate_model(
             model,
