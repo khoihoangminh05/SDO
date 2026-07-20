@@ -130,6 +130,8 @@ class TTLDNet(nn.Module):
         outputs: dict[str, Any],
         targets: list[torch.Tensor],
         loss_fns: dict[str, nn.Module] | None = None,
+        lambda1: float | None = None,
+        lambda2: float | None = None,
     ) -> dict[str, torch.Tensor]:
         """
         Phase 6: L_det + λ1·L_topology + λ2·L_verify.
@@ -147,6 +149,8 @@ class TTLDNet(nn.Module):
         loss_fns = loss_fns or {}
         losses: dict[str, torch.Tensor] = {}
         total = outputs["fcand"].sum() * 0.0
+        lambda1 = self.cfg.loss.lambda1 if lambda1 is None else lambda1
+        lambda2 = self.cfg.loss.lambda2 if lambda2 is None else lambda2
 
         det_fn = loss_fns.get("detection")
         if det_fn is None:
@@ -170,12 +174,12 @@ class TTLDNet(nn.Module):
         labels = labels.to(device)
         confidences = confidences.to(device)
 
-        if "valid_logits" in outputs and self.cfg.loss.lambda2 > 0:
+        if "valid_logits" in outputs and lambda2 > 0:
             loss_verify = verification_bce_loss(outputs["valid_logits"], labels)
             losses["verify"] = loss_verify
-            total = total + self.cfg.loss.lambda2 * loss_verify
+            total = total + lambda2 * loss_verify
 
-        if "zi" in outputs and self.cfg.loss.lambda1 > 0:
+        if "zi" in outputs and lambda1 > 0:
             infonce = loss_fns.get("infonce")
             if infonce is None:
                 infonce = InfoNCELoss(temperature=self.cfg.loss.infonce_temperature).to(device)
@@ -187,7 +191,7 @@ class TTLDNet(nn.Module):
                 n_hard=self.cfg.loss.n_hard_negatives,
             )
             losses["topology"] = loss_topo
-            total = total + self.cfg.loss.lambda1 * loss_topo
+            total = total + lambda1 * loss_topo
 
         losses["total"] = total
         return losses

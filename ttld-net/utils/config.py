@@ -28,13 +28,14 @@ class TrainingConfig:
     epochs: int = 100
     batch_size: int = 4
     val_batch_size: int = 2
-    max_candidates: int = 400
-    use_amp: bool = True
+    max_candidates: int = 200
+    use_amp: bool = False
     optimizer: str = "AdamW"
-    lr: float = 1e-4
+    lr: float = 5e-5
     scheduler: str = "CosineAnnealing"
     warmup_epochs: int = 5
-    grad_clip_norm: float = 1.0
+    grad_clip_norm: float = 0.5
+    aux_loss_warmup_steps: int = 5
 
 
 @dataclass

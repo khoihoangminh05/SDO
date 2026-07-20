@@ -33,7 +33,7 @@ class InfoNCELoss(nn.Module):
         pos_sim = (zi_norm * zp_norm).sum(-1) / self.tau
         neg_sim = torch.einsum("bnd,bnmd->bnm", zi_norm, zn_norm) / self.tau
 
-        logits = torch.cat([pos_sim.unsqueeze(-1), neg_sim], dim=-1)
+        logits = torch.cat([pos_sim.unsqueeze(-1), neg_sim], dim=-1).float().clamp(-50.0, 50.0)
         labels = torch.zeros(logits.shape[:2], dtype=torch.long, device=logits.device)
         return F.cross_entropy(
             logits.view(-1, logits.shape[-1]),

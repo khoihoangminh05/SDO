@@ -7,6 +7,7 @@ import math
 import shutil
 from contextlib import nullcontext
 from pathlib import Path
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -86,6 +87,40 @@ def _format_losses(losses: dict[str, torch.Tensor]) -> str:
     return " | ".join(parts)
 
 
+def _grads_finite(model: nn.Module) -> bool:
+    for param in model.parameters():
+        if param.grad is not None and not torch.isfinite(param.grad).all():
+            return False
+    return True
+
+
+def _outputs_finite(outputs: dict[str, Any]) -> bool:
+    for key in ("fcand", "zi", "valid_logits"):
+        tensor = outputs.get(key)
+        if tensor is not None and not torch.isfinite(tensor).all():
+            return False
+    for scale in outputs.get("raw_outputs") or []:
+        for part in ("obj", "cls", "box"):
+            tensor = scale.get(part)
+            if tensor is not None and not torch.isfinite(tensor).all():
+                return False
+    return True
+
+
+def _diagnose_outputs(outputs: dict[str, Any]) -> str:
+    bad: list[str] = []
+    for key in ("fcand", "zi", "valid_logits"):
+        tensor = outputs.get(key)
+        if tensor is not None and not torch.isfinite(tensor).all():
+            bad.append(key)
+    for idx, scale in enumerate(outputs.get("raw_outputs") or []):
+        for part in ("obj", "cls", "box"):
+            tensor = scale.get(part)
+            if tensor is not None and not torch.isfinite(tensor).all():
+                bad.append(f"raw[{idx}].{part}")
+    return ", ".join(bad) if bad else "unknown"
+
+
 def train_ttld(
     cfg: TTLDConfig,
     output_dir: Path,
@@ -138,8 +173,9 @@ def train_ttld(
 
     optimizer = AdamW(model.parameters(), lr=cfg.training.lr, weight_decay=1e-4)
     scheduler = build_scheduler(optimizer, cfg)
-    use_amp = bool(getattr(cfg.training, "use_amp", True)) and torch_device.type == "cuda"
+    use_amp = bool(getattr(cfg.training, "use_amp", False)) and torch_device.type == "cuda"
     scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    aux_warmup = int(getattr(cfg.training, "aux_loss_warmup_steps", 5))
 
     loss_fns: dict[str, nn.Module] = {
         "detection": DetectionLoss(
@@ -168,8 +204,21 @@ def train_ttld(
     print(
         f"Training on {torch_device} | batch_size={cfg.training.batch_size} | "
         f"val_batch_size={val_batch_size} | max_candidates={model.generator.max_candidates} | "
-        f"amp={use_amp}"
+        f"amp={use_amp} | lr={cfg.training.lr} | aux_warmup={aux_warmup}"
     )
+
+    # Sanity-check one batch before training.
+    model.train()
+    for sanity_images, _ in train_loader:
+        sanity_images = sanity_images.to(torch_device, non_blocking=True)
+        with _autocast_context(torch_device, use_amp):
+            sanity_out = model(sanity_images)
+        if not _outputs_finite(sanity_out):
+            raise RuntimeError(
+                f"Forward pass produces non-finite values before training: "
+                f"{_diagnose_outputs(sanity_out)}. Try --no-amp or lower --batch-size."
+            )
+        break
 
     for epoch in range(epochs):
         model.train()
@@ -187,9 +236,33 @@ def train_ttld(
             with _autocast_context(torch_device, use_amp):
                 outputs = model(images)
 
+            if not _outputs_finite(outputs):
+                consecutive_bad += 1
+                print(
+                    f"WARNING: non-finite forward at step {global_step + 1}: "
+                    f"{_diagnose_outputs(outputs)} (skipped {consecutive_bad}x)"
+                )
+                optimizer.zero_grad(set_to_none=True)
+                del outputs
+                if consecutive_bad >= 20:
+                    raise RuntimeError(
+                        "Training aborted: forward outputs became non-finite. "
+                        "Pull latest code (use_amp=false) and retry with --no-amp."
+                    )
+                continue
+
+            lambda1 = 0.0 if global_step < aux_warmup else cfg.loss.lambda1
+            lambda2 = 0.0 if global_step < aux_warmup else cfg.loss.lambda2
+
             # Losses in fp32 — avoids NaN from fp16 BCE/InfoNCE on large tensors.
             with _autocast_context(torch_device, enabled=False):
-                losses = model.compute_losses(outputs, targets, loss_fns)
+                losses = model.compute_losses(
+                    outputs,
+                    targets,
+                    loss_fns,
+                    lambda1=lambda1,
+                    lambda2=lambda2,
+                )
 
             if _loss_has_nan(losses):
                 consecutive_bad += 1
@@ -217,14 +290,32 @@ def train_ttld(
                 continue
 
             consecutive_bad = 0
-            scaler.scale(losses["total"]).backward()
-            scaler.unscale_(optimizer)
+            if use_amp:
+                scaler.scale(losses["total"]).backward()
+                scaler.unscale_(optimizer)
+            else:
+                losses["total"].backward()
+
+            if not _grads_finite(model):
+                print(
+                    f"WARNING: non-finite gradients at step {global_step + 1}, "
+                    f"skipping optimizer step ({_format_losses(losses)})"
+                )
+                optimizer.zero_grad(set_to_none=True)
+                if use_amp:
+                    scaler.update()
+                del outputs, losses
+                continue
+
             torch.nn.utils.clip_grad_norm_(
                 model.parameters(),
                 max_norm=cfg.training.grad_clip_norm,
             )
-            scaler.step(optimizer)
-            scaler.update()
+            if use_amp:
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
 
             global_step += 1
             steps_this_epoch += 1
