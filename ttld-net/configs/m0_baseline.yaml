@@ -3,7 +3,7 @@
 model:
   backbone: yolo26
   mode: baseline
-  baseline_weights: yolov8n.pt
+  baseline_weights: yolo26n.pt
   use_shallow_features: false
   use_soft_nms: false
   heads: []

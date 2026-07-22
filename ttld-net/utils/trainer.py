@@ -176,6 +176,10 @@ def train_ttld(
     use_amp = bool(getattr(cfg.training, "use_amp", False)) and torch_device.type == "cuda"
     scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
     aux_warmup = int(getattr(cfg.training, "aux_loss_warmup_steps", 5))
+    log_interval = int(getattr(cfg.training, "log_interval", 50))
+    val_max_batches = getattr(cfg.training, "val_max_batches", None)
+    train_batches = len(train_loader)
+    val_batches = len(val_loader)
 
     loss_fns: dict[str, nn.Module] = {
         "detection": DetectionLoss(
@@ -206,6 +210,11 @@ def train_ttld(
         f"val_batch_size={val_batch_size} | max_candidates={model.generator.max_candidates} | "
         f"amp={use_amp} | lr={cfg.training.lr} | aux_warmup={aux_warmup}"
     )
+    print(
+        f"Dataset: {train_batches} train batches/epoch, {val_batches} val batches | "
+        f"log every {log_interval} steps"
+    )
+    print("Running sanity forward pass...", flush=True)
 
     # Sanity-check one batch before training.
     model.train()
@@ -219,11 +228,16 @@ def train_ttld(
                 f"{_diagnose_outputs(sanity_out)}. Try --no-amp or lower --batch-size."
             )
         break
+    print("Sanity check OK. Training started.", flush=True)
+
+    import time
 
     for epoch in range(epochs):
         model.train()
         epoch_losses: dict[str, float] = {}
         steps_this_epoch = 0
+        epoch_t0 = time.time()
+        print(f"Epoch {epoch + 1}/{epochs} started ({train_batches} batches)...", flush=True)
 
         for images, targets in train_loader:
             if max_steps is not None and global_step >= max_steps:
@@ -319,15 +333,25 @@ def train_ttld(
 
             global_step += 1
             steps_this_epoch += 1
-            for key, value in losses.items():
-                epoch_losses[key] = epoch_losses.get(key, 0.0) + float(value.detach())
 
             writer.add_scalar("Loss/total", float(losses["total"]), global_step)
             for key in ("det", "topology", "verify"):
                 if key in losses:
                     writer.add_scalar(f"Loss/{key}", float(losses[key]), global_step)
 
+            step_loss = float(losses["total"].detach())
+            for key, value in losses.items():
+                epoch_losses[key] = epoch_losses.get(key, 0.0) + float(value.detach())
+
             del outputs, losses
+
+            if global_step == 1 or (log_interval > 0 and global_step % log_interval == 0):
+                elapsed = time.time() - epoch_t0
+                print(
+                    f"  step {global_step}/{train_batches} | loss={step_loss:.4f} | "
+                    f"{elapsed:.0f}s elapsed this epoch",
+                    flush=True,
+                )
 
             if max_steps is not None and global_step >= max_steps:
                 break
@@ -342,13 +366,14 @@ def train_ttld(
         if torch_device.type == "cuda":
             torch.cuda.empty_cache()
 
+        val_limit = val_max_batches if max_steps is None else 20
         val_metrics = evaluate_model(
             model,
             val_loader,
             torch_device,
             conf_threshold=cfg.data.conf_threshold if max_steps is not None else cfg.data.eval_conf_threshold,
             use_verifier=use_verifier if max_steps is None else False,
-            max_batches=20 if max_steps is not None else None,
+            max_batches=val_limit,
         )
         for key, value in val_metrics.items():
             if key in {"ap50", "apsmall", "recall", "precision", "fpr"}:

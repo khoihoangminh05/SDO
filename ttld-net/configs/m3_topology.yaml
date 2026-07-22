@@ -12,11 +12,18 @@ model:
 
 training:
   epochs: 100
-  batch_size: 4
+  batch_size: 2
   val_batch_size: 2
-  max_candidates: 400
-  use_amp: true
-  lr: 1.0e-4
+  max_candidates: 200
+  use_amp: false
+  optimizer: AdamW
+  lr: 5.0e-5
+  scheduler: CosineAnnealing
+  warmup_epochs: 5
+  grad_clip_norm: 0.5
+  aux_loss_warmup_steps: 5
+  log_interval: 50
+  val_max_batches: 50
 
 loss:
   lambda1: 1.0
@@ -24,15 +31,17 @@ loss:
   focal_gamma: 1.5
   focal_alpha: 0.75
   infonce_temperature: 0.07
+  n_hard_negatives: 32
 
 data:
   ultralytics_yaml: ../apps/worker/datasets/bstld.yaml
   train_yaml: ../apps/worker/datasets/dataset_train_rgb/train.yaml
   val_yaml: ../apps/worker/datasets/dataset_val_sample/rgb/val
   conf_threshold: 0.05
-  soft_nms_sigma: 0.5
   eval_conf_threshold: 0.5
+  soft_nms_sigma: 0.5
   num_workers: 4
+  pin_memory: true
 
 topology:
   n_points: 4

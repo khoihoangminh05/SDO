@@ -36,6 +36,8 @@ class TrainingConfig:
     warmup_epochs: int = 5
     grad_clip_norm: float = 0.5
     aux_loss_warmup_steps: int = 5
+    log_interval: int = 50
+    val_max_batches: int = 50
 
 
 @dataclass

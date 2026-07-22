@@ -17,7 +17,7 @@ from data.dataset import create_dataloader
 from models.ttld_net import TTLDNet
 from utils.config import load_config, resolve_path
 from utils.metrics import evaluate_model, save_metrics
-from utils.yolo_baseline import evaluate_baseline, evaluate_high_recall
+from utils.yolo_baseline import evaluate_baseline
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,14 +56,13 @@ def main() -> None:
 
     if cfg.model.mode == "baseline":
         metrics = evaluate_baseline(weights, cfg, conf=eval_conf, device=device)
-    elif cfg.model.mode in {"shallow", "shallow_focal"}:
-        metrics = evaluate_high_recall(weights, cfg, conf=eval_conf, device=device)
-    elif cfg.model.mode in {"topology", "full"}:
+    elif cfg.model.mode in {"shallow", "shallow_focal", "topology", "full"}:
         model = _load_ttld_model(cfg, weights, torch_device)
         val_yaml = resolve_path(cfg.data.val_yaml)
+        val_batch = getattr(cfg.training, "val_batch_size", None) or min(cfg.training.batch_size, 2)
         val_loader = create_dataloader(
             val_yaml,
-            batch_size=cfg.training.batch_size,
+            batch_size=val_batch,
             num_workers=cfg.data.num_workers,
             shuffle=False,
             pin_memory=False,

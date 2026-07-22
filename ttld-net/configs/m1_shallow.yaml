@@ -2,6 +2,7 @@
 
 model:
   backbone: yolo26
+  neck: fpn_panet
   mode: shallow
   use_shallow_features: true
   use_soft_nms: true
@@ -10,25 +11,31 @@ model:
 
 training:
   epochs: 100
-  batch_size: 32
+  batch_size: 2
+  val_batch_size: 2
+  max_candidates: 200
+  use_amp: false
   optimizer: AdamW
-  lr: 1.0e-4
+  lr: 5.0e-5
+  scheduler: CosineAnnealing
   warmup_epochs: 5
+  grad_clip_norm: 0.5
+  aux_loss_warmup_steps: 0
+  log_interval: 50
+  val_max_batches: 50
 
 loss:
   lambda1: 0.0
   lambda2: 0.0
-  focal_gamma: 1.5
-  focal_alpha: 0.75
+  focal_gamma: 2.0
+  focal_alpha: 0.25
 
 data:
   ultralytics_yaml: ../apps/worker/datasets/bstld.yaml
+  train_yaml: ../apps/worker/datasets/dataset_train_rgb/train.yaml
+  val_yaml: ../apps/worker/datasets/dataset_val_sample/rgb/val
   conf_threshold: 0.05
+  eval_conf_threshold: 0.5
   soft_nms_sigma: 0.5
   num_workers: 4
-
-heads:
-  tiny_generator:
-    conf_threshold: 0.05
-    soft_nms_sigma: 0.5
-    fcand_dim: 256
+  pin_memory: true
