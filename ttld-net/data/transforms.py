@@ -87,11 +87,11 @@ class ToTensorNormalize:
         return tensor, boxes
 
 
-def get_train_transforms() -> ComposeWithBoxes:
+def get_train_transforms(height: int = TARGET_HEIGHT, width: int = TARGET_WIDTH) -> ComposeWithBoxes:
     """Default training augmentation chain (Phase 1)."""
     return ComposeWithBoxes(
         [
-            ResizeWithBoxes(),
+            ResizeWithBoxes(height=height, width=width),
             RandomHorizontalFlip(p=0.5),
             ColorJitterWrapper(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.05),
             ToTensorNormalize(),
@@ -99,6 +99,6 @@ def get_train_transforms() -> ComposeWithBoxes:
     )
 
 
-def get_val_transforms() -> ComposeWithBoxes:
+def get_val_transforms(height: int = TARGET_HEIGHT, width: int = TARGET_WIDTH) -> ComposeWithBoxes:
     """Validation transforms without random augmentation."""
-    return ComposeWithBoxes([ResizeWithBoxes(), ToTensorNormalize()])
+    return ComposeWithBoxes([ResizeWithBoxes(height=height, width=width), ToTensorNormalize()])

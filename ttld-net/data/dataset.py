@@ -224,6 +224,23 @@ def custom_collate(
     return torch.stack(images, dim=0), list(targets)
 
 
+class SubsetDataset(Dataset):
+    """Use the first fraction of a dataset (deterministic, fast ablation)."""
+
+    def __init__(self, base: Dataset, ratio: float = 1.0) -> None:
+        if not 0 < ratio <= 1.0:
+            raise ValueError(f"train_subset_ratio must be in (0, 1], got {ratio}")
+        self.base = base
+        n = len(base)
+        self.indices = list(range(max(1, int(n * ratio))))
+
+    def __len__(self) -> int:
+        return len(self.indices)
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.base[self.indices[idx]]
+
+
 def create_dataloader(
     yaml_path: str | Path,
     batch_size: int = 16,
@@ -233,19 +250,34 @@ def create_dataloader(
     transform: Callable[..., Any] | None = None,
     images_root: str | Path | None = None,
     split: str = "train",
+    image_size: tuple[int, int] | None = None,
+    subset_ratio: float = 1.0,
 ) -> DataLoader:
     """Factory for Bosch YAML or YOLO-directory DataLoader with custom collate."""
     from data.transforms import get_train_transforms, get_val_transforms
 
     resolved, mode = resolve_dataset_path(yaml_path)
+    height, width = image_size if image_size else (720, 1280)
     if transform is None:
-        transform = get_train_transforms() if split == "train" else get_val_transforms()
+        transform = (
+            get_train_transforms(height=height, width=width)
+            if split == "train"
+            else get_val_transforms(height=height, width=width)
+        )
 
     if mode == "yaml":
         root = Path(images_root) if images_root else resolved.parent
         dataset: Dataset = BoschDataset(resolved, transform=transform, images_root=root)
     else:
-        dataset = YoloDirDataset(resolved, transform=transform)
+        dataset = YoloDirDataset(
+            resolved,
+            transform=transform,
+            image_width=width,
+            image_height=height,
+        )
+
+    if split == "train" and subset_ratio < 1.0:
+        dataset = SubsetDataset(dataset, ratio=subset_ratio)
 
     return DataLoader(
         dataset,

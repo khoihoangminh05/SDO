@@ -60,6 +60,7 @@ def main() -> None:
         model = _load_ttld_model(cfg, weights, torch_device)
         val_yaml = resolve_path(cfg.data.val_yaml)
         val_batch = getattr(cfg.training, "val_batch_size", None) or min(cfg.training.batch_size, 2)
+        image_size = tuple(cfg.data.image_size)
         val_loader = create_dataloader(
             val_yaml,
             batch_size=val_batch,
@@ -67,6 +68,7 @@ def main() -> None:
             shuffle=False,
             pin_memory=False,
             split="val",
+            image_size=image_size,
         )
         metrics = evaluate_model(
             model,

@@ -38,6 +38,8 @@ class TrainingConfig:
     aux_loss_warmup_steps: int = 5
     log_interval: int = 50
     val_max_batches: int = 50
+    max_train_batches: int | None = None
+    eval_every_n_epochs: int = 1
 
 
 @dataclass
@@ -65,6 +67,7 @@ class DataConfig:
     soft_nms_sigma: float = 0.5
     num_workers: int = 4
     pin_memory: bool = True
+    train_subset_ratio: float = 1.0
 
 
 @dataclass

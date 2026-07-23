@@ -15,7 +15,17 @@ def test_ablation_configs_exist() -> None:
         assert (ROOT / "configs" / f"{name}.yaml").is_file(), f"missing {name}.yaml"
 
 
-def test_run_ablation_dry_run() -> None:
+def test_fast_profile_overrides() -> None:
+    from utils.config import load_config
+    from utils.fast_train import apply_fast_profile
+
+    cfg = load_config(ROOT / "configs" / "m4_full_ttld.yaml")
+    apply_fast_profile(cfg)
+    assert cfg.training.epochs == 12
+    assert cfg.training.max_train_batches == 120
+    assert cfg.data.image_size == (480, 640)
+    assert cfg.training.use_amp is True
+
     result = subprocess.run(
         [sys.executable, "scripts/run_ablation.py", "--dry-run", "--configs", "m4_full_ttld"],
         cwd=ROOT,

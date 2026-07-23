@@ -144,6 +144,7 @@ def train_ttld(
     if torch_device.type == "cuda":
         torch.cuda.empty_cache()
         gc.collect()
+        torch.backends.cudnn.benchmark = True
 
     model = TTLDNet(cfg).to(torch_device)
     if resume:
@@ -154,6 +155,9 @@ def train_ttld(
     val_yaml = resolve_path(cfg.data.val_yaml)
     val_batch_size = getattr(cfg.training, "val_batch_size", None) or min(cfg.training.batch_size, 2)
 
+    image_size = tuple(cfg.data.image_size)
+    subset_ratio = float(getattr(cfg.data, "train_subset_ratio", 1.0))
+
     train_loader = create_dataloader(
         train_yaml,
         batch_size=cfg.training.batch_size,
@@ -161,6 +165,8 @@ def train_ttld(
         shuffle=True,
         pin_memory=cfg.data.pin_memory and torch_device.type == "cuda",
         split="train",
+        image_size=image_size,
+        subset_ratio=subset_ratio,
     )
     val_loader = create_dataloader(
         val_yaml,
@@ -169,6 +175,8 @@ def train_ttld(
         shuffle=False,
         pin_memory=cfg.data.pin_memory and torch_device.type == "cuda",
         split="val",
+        image_size=image_size,
+        subset_ratio=1.0,
     )
 
     optimizer = AdamW(model.parameters(), lr=cfg.training.lr, weight_decay=1e-4)
@@ -178,7 +186,11 @@ def train_ttld(
     aux_warmup = int(getattr(cfg.training, "aux_loss_warmup_steps", 5))
     log_interval = int(getattr(cfg.training, "log_interval", 50))
     val_max_batches = getattr(cfg.training, "val_max_batches", None)
+    max_train_batches = getattr(cfg.training, "max_train_batches", None)
+    eval_every = max(int(getattr(cfg.training, "eval_every_n_epochs", 1)), 1)
     train_batches = len(train_loader)
+    if max_train_batches is not None:
+        train_batches = min(train_batches, int(max_train_batches))
     val_batches = len(val_loader)
 
     loss_fns: dict[str, nn.Module] = {
@@ -208,11 +220,13 @@ def train_ttld(
     print(
         f"Training on {torch_device} | batch_size={cfg.training.batch_size} | "
         f"val_batch_size={val_batch_size} | max_candidates={model.generator.max_candidates} | "
-        f"amp={use_amp} | lr={cfg.training.lr} | aux_warmup={aux_warmup}"
+        f"amp={use_amp} | lr={cfg.training.lr} | aux_warmup={aux_warmup} | "
+        f"image={image_size[0]}x{image_size[1]}"
     )
     print(
-        f"Dataset: {train_batches} train batches/epoch, {val_batches} val batches | "
-        f"log every {log_interval} steps"
+        f"Dataset: up to {train_batches} train batches/epoch "
+        f"(loader={len(train_loader)}, subset={subset_ratio:.0%}), "
+        f"{val_batches} val batches | log every {log_interval} steps"
     )
     print("Running sanity forward pass...", flush=True)
 
@@ -232,6 +246,8 @@ def train_ttld(
 
     import time
 
+    last_val_metrics: dict[str, float] = {}
+
     for epoch in range(epochs):
         model.train()
         epoch_losses: dict[str, float] = {}
@@ -239,7 +255,9 @@ def train_ttld(
         epoch_t0 = time.time()
         print(f"Epoch {epoch + 1}/{epochs} started ({train_batches} batches)...", flush=True)
 
-        for images, targets in train_loader:
+        for batch_idx, (images, targets) in enumerate(train_loader):
+            if max_train_batches is not None and batch_idx >= int(max_train_batches):
+                break
             if max_steps is not None and global_step >= max_steps:
                 break
 
@@ -345,11 +363,11 @@ def train_ttld(
 
             del outputs, losses
 
-            if global_step == 1 or (log_interval > 0 and global_step % log_interval == 0):
+            if global_step == 1 or (log_interval > 0 and steps_this_epoch % log_interval == 0):
                 elapsed = time.time() - epoch_t0
                 print(
-                    f"  step {global_step}/{train_batches} | loss={step_loss:.4f} | "
-                    f"{elapsed:.0f}s elapsed this epoch",
+                    f"  epoch {epoch + 1} batch {steps_this_epoch}/{train_batches} | "
+                    f"loss={step_loss:.4f} | {elapsed:.0f}s",
                     flush=True,
                 )
 
@@ -366,32 +384,39 @@ def train_ttld(
         if torch_device.type == "cuda":
             torch.cuda.empty_cache()
 
-        val_limit = val_max_batches if max_steps is None else 20
-        val_metrics = evaluate_model(
-            model,
-            val_loader,
-            torch_device,
-            conf_threshold=cfg.data.conf_threshold if max_steps is not None else cfg.data.eval_conf_threshold,
-            use_verifier=use_verifier if max_steps is None else False,
-            max_batches=val_limit,
-        )
-        for key, value in val_metrics.items():
-            if key in {"ap50", "apsmall", "recall", "precision", "fpr"}:
-                writer.add_scalar(f"Metrics/{key}", value, epoch)
+        is_last_epoch = epoch + 1 == epochs
+        do_val = is_last_epoch or ((epoch + 1) % eval_every == 0)
+        if do_val:
+            val_limit = val_max_batches if max_steps is None else 20
+            val_metrics = evaluate_model(
+                model,
+                val_loader,
+                torch_device,
+                conf_threshold=cfg.data.conf_threshold if max_steps is not None else cfg.data.eval_conf_threshold,
+                use_verifier=use_verifier if max_steps is None else False,
+                max_batches=val_limit,
+            )
+            last_val_metrics = val_metrics
+            for key, value in val_metrics.items():
+                if key in {"ap50", "apsmall", "recall", "precision", "fpr"}:
+                    writer.add_scalar(f"Metrics/{key}", value, epoch)
 
-        recall = val_metrics.get("recall", 0.0)
-        if recall >= best_recall:
-            best_recall = recall
-            _save_checkpoint(best_path, model, optimizer, epoch, val_metrics)
-            save_metrics(val_metrics, output_dir / "best_metrics.json")
+            recall = val_metrics.get("recall", 0.0)
+            if recall >= best_recall:
+                best_recall = recall
+                _save_checkpoint(best_path, model, optimizer, epoch, val_metrics)
+                save_metrics(val_metrics, output_dir / "best_metrics.json")
+        else:
+            val_metrics = last_val_metrics
 
         _save_checkpoint(last_path, model, optimizer, epoch, val_metrics)
 
+        val_note = "" if do_val else " (val skipped)"
         print(
             f"Epoch {epoch + 1}/{epochs} | "
             f"loss={epoch_losses.get('total', 0) / num_steps:.4f} | "
             f"recall={val_metrics.get('recall', 0):.4f} | "
-            f"ap50={val_metrics.get('ap50', 0):.4f}"
+            f"ap50={val_metrics.get('ap50', 0):.4f}{val_note}"
         )
 
         if max_steps is not None and global_step >= max_steps:

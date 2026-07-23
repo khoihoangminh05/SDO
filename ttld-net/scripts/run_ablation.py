@@ -39,10 +39,11 @@ def main() -> None:
     parser.add_argument("--max-epochs", type=int, default=None, help="Override epochs in config")
     parser.add_argument("--skip-train", action="store_true")
     parser.add_argument("--skip-test", action="store_true")
+    parser.add_argument("--fast", action="store_true", help="Fast ablation profile (~1h/model on 4090)")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    use_no_amp = not args.amp
+    use_no_amp = args.amp and not args.fast
 
     for name in args.configs:
         config = ROOT / "configs" / f"{name}.yaml"
@@ -65,7 +66,9 @@ def main() -> None:
                 "--batch-size",
                 str(args.batch_size),
             ]
-            if use_no_amp:
+            if args.fast:
+                train_cmd.append("--fast")
+            elif use_no_amp:
                 train_cmd.append("--no-amp")
             if args.max_steps is not None:
                 train_cmd.extend(["--max-steps", str(args.max_steps)])

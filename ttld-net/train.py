@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from utils.config import load_config
+from utils.fast_train import apply_fast_profile
 from utils.trainer import train_ttld
 from utils.yolo_baseline import train_baseline
 
@@ -26,12 +27,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-steps", type=int, default=None, help="Stop after N optimizer steps (smoke test)")
     parser.add_argument("--batch-size", type=int, default=None, help="Override training.batch_size")
     parser.add_argument("--no-amp", action="store_true", help="Disable mixed-precision training")
+    parser.add_argument("--fast", action="store_true", help="Fast ablation profile (smaller data, fewer steps)")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     cfg = load_config(args.config)
+    if args.fast:
+        apply_fast_profile(cfg)
+        print("FAST profile: 480x640, 12 epochs, 120 batches/epoch, AMP on, subset=25%")
     if args.batch_size is not None:
         cfg.training.batch_size = args.batch_size
     if args.no_amp:
