@@ -11,12 +11,13 @@ def apply_fast_profile(cfg: TTLDConfig) -> TTLDConfig:
 
     Typical effect on RTX 4090: ~45–90 min per M1–M4 variant (vs many days).
     """
+    # Speed from resolution/subset/steps — keep AMP off (fp16 grads often Inf on this stack).
     cfg.training.epochs = 12
     cfg.training.batch_size = 4
     cfg.training.val_batch_size = 4
     cfg.training.max_candidates = 64
-    cfg.training.use_amp = True
-    cfg.training.lr = 1e-4
+    cfg.training.use_amp = False
+    cfg.training.lr = 8e-5
     cfg.training.warmup_epochs = 1
     cfg.training.aux_loss_warmup_steps = 2
     cfg.training.grad_clip_norm = 0.5

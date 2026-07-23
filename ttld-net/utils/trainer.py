@@ -323,30 +323,40 @@ def train_ttld(
 
             consecutive_bad = 0
             if use_amp:
+                # GradScaler skips the step when grads overflow; do not hard-abort.
                 scaler.scale(losses["total"]).backward()
                 scaler.unscale_(optimizer)
-            else:
-                losses["total"].backward()
-
-            if not _grads_finite(model):
-                print(
-                    f"WARNING: non-finite gradients at step {global_step + 1}, "
-                    f"skipping optimizer step ({_format_losses(losses)})"
-                )
-                optimizer.zero_grad(set_to_none=True)
-                if use_amp:
-                    scaler.update()
-                del outputs, losses
-                continue
-
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(),
-                max_norm=cfg.training.grad_clip_norm,
-            )
-            if use_amp:
+                grads_ok = _grads_finite(model)
+                if grads_ok:
+                    torch.nn.utils.clip_grad_norm_(
+                        model.parameters(),
+                        max_norm=cfg.training.grad_clip_norm,
+                    )
                 scaler.step(optimizer)
                 scaler.update()
+                if not grads_ok:
+                    optimizer.zero_grad(set_to_none=True)
+                    if global_step < 3 or (global_step + 1) % 50 == 0:
+                        print(
+                            f"WARNING: AMP overflow at step {global_step + 1} "
+                            f"(scale={scaler.get_scale():.0f}, {_format_losses(losses)})",
+                            flush=True,
+                        )
             else:
+                losses["total"].backward()
+                if not _grads_finite(model):
+                    print(
+                        f"WARNING: non-finite gradients at step {global_step + 1}, "
+                        f"skipping optimizer step ({_format_losses(losses)})",
+                        flush=True,
+                    )
+                    optimizer.zero_grad(set_to_none=True)
+                    del outputs, losses
+                    continue
+                torch.nn.utils.clip_grad_norm_(
+                    model.parameters(),
+                    max_norm=cfg.training.grad_clip_norm,
+                )
                 optimizer.step()
 
             global_step += 1

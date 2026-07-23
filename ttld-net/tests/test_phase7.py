@@ -24,7 +24,7 @@ def test_fast_profile_overrides() -> None:
     assert cfg.training.epochs == 12
     assert cfg.training.max_train_batches == 120
     assert cfg.data.image_size == (480, 640)
-    assert cfg.training.use_amp is True
+    assert cfg.training.use_amp is False
 
     result = subprocess.run(
         [sys.executable, "scripts/run_ablation.py", "--dry-run", "--configs", "m4_full_ttld"],

@@ -36,7 +36,7 @@ def main() -> None:
     cfg = load_config(args.config)
     if args.fast:
         apply_fast_profile(cfg)
-        print("FAST profile: 480x640, 12 epochs, 120 batches/epoch, AMP on, subset=25%")
+        print("FAST profile: 480x640, 12 epochs, 120 batches/epoch, AMP off, subset=25%")
     if args.batch_size is not None:
         cfg.training.batch_size = args.batch_size
     if args.no_amp:

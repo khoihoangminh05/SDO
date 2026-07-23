@@ -33,7 +33,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Phase 7 ablation runner (M0–M4)")
     parser.add_argument("--configs", nargs="*", default=CONFIGS, help="Subset of config stems")
     parser.add_argument("--device", default="0", help="CUDA device id or cpu")
-    parser.add_argument("--batch-size", type=int, default=2)
+    parser.add_argument("--batch-size", type=int, default=None, help="Override batch size")
     parser.add_argument("--amp", action="store_true", help="Enable AMP (default: off)")
     parser.add_argument("--max-steps", type=int, default=None, help="Smoke test: stop after N steps")
     parser.add_argument("--max-epochs", type=int, default=None, help="Override epochs in config")
@@ -42,8 +42,6 @@ def main() -> None:
     parser.add_argument("--fast", action="store_true", help="Fast ablation profile (~1h/model on 4090)")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-
-    use_no_amp = args.amp and not args.fast
 
     for name in args.configs:
         config = ROOT / "configs" / f"{name}.yaml"
@@ -63,13 +61,15 @@ def main() -> None:
                 f"logs/ablation/{name}",
                 "--device",
                 str(args.device),
-                "--batch-size",
-                str(args.batch_size),
             ]
             if args.fast:
                 train_cmd.append("--fast")
-            elif use_no_amp:
+            elif not args.amp:
                 train_cmd.append("--no-amp")
+            if args.batch_size is not None:
+                train_cmd.extend(["--batch-size", str(args.batch_size)])
+            elif not args.fast:
+                train_cmd.extend(["--batch-size", "2"])
             if args.max_steps is not None:
                 train_cmd.extend(["--max-steps", str(args.max_steps)])
             if args.max_epochs is not None:
