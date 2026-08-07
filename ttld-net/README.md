@@ -92,7 +92,7 @@ ttld-net/
 ```
 
 Upstream specs: `../document/TTLD_Net_PROJECT_SPEC.md`, `../document/TTLD_Net_PLAN.md`.  
-Honest result snapshot: [`document/RESULTS.md`](document/RESULTS.md).
+Honest result snapshot: [`document/BAO_CAO_KET_QUA.md`](document/BAO_CAO_KET_QUA.md) (VN, for advisors) · [`document/RESULTS.md`](document/RESULTS.md) (EN).
 
 ---
 

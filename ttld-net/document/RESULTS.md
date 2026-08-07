@@ -1,37 +1,35 @@
-# Experimental results (honest snapshot)
+# Experimental results (EN snapshot)
 
-> Update this file when new ablation JSON lands under `results/ablation/`.  
-> Numbers below used the **Colab `--proplus`** profile (data subset + capped
-> batches) unless marked otherwise — **not** the full YAML 100-epoch protocol.
+Vietnamese full report for advisors: **[`BAO_CAO_KET_QUA.md`](BAO_CAO_KET_QUA.md)**.
 
-## Protocol reminder
+> Bosch Small Traffic Lights (BSTLD) is a **hard** benchmark: many boxes are only a few pixels wide, so IoU@0.5 is unforgiving and absolute AP is much lower than on COCO.
 
-| Setting | Full YAML (paper) | `--proplus` (Colab) |
-|---------|-------------------|---------------------|
-| Epochs | 100 | 50 |
-| Train subset | 100% | 80% |
-| Max train batches / epoch | unlimited | 500 |
-| Image size | config / default | 640×1120 |
-| Eval conf (M1–M4) | 0.05 | 0.05 |
+## Protocol (Colab `--proplus`, not full YAML)
 
-## M0 — YOLO26n baseline
+| Setting | Value |
+|---------|-------|
+| Epochs | 50 |
+| Train subset | ~80% |
+| Max train batches / epoch | 500 |
+| Image size | 640×1120 |
+| M1 eval conf | 0.05 |
+| M0 eval conf | 0.5 |
 
-- Source: Ultralytics training on BSTLD
-- Approximate AP50 ≈ **0.54** at conf 0.5 (not directly comparable to M1@0.05)
+## Results
 
-## M1 — Shallow generator + Soft-NMS
+| Variant | Role | AP50 | Recall | Precision |
+|---------|------|-----:|-------:|----------:|
+| M0 YOLO26n | End-to-end baseline | ~0.54 @ 0.5 | — | — |
+| M1 Shallow | Stage-1 high-recall | **0.2412** | **0.5355** | 0.0885 |
+| M2–M4 | Focal / topology / full | — | — | pending |
+
+### M1 detail
 
 | Metric | Value |
 |--------|------:|
 | AP50 | 0.2412 |
 | mAP50-95 | 0.1447 |
-| Recall @ 0.05 | 0.5355 |
-| Precision @ 0.05 | 0.0885 |
 | TP / FP / FN | 1751 / 18027 / 1519 |
+| num_gt | 3270 |
 
-Interpretation: Stage-1 is recall-oriented; low precision at conf=0.05 is expected.
-M3/M4 verification is designed to raise precision.
-
-## M2 / M3 / M4
-
-Pending.
+**Reading:** M0 is stronger on AP today. M1 shows the generator learns (recall≈0.54) but low precision at conf=0.05 is expected until M3/M4 verification. Do not treat Stage-1 alone as the final TTLD vs YOLO comparison.
