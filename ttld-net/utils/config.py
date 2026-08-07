@@ -18,6 +18,7 @@ class ModelConfig:
     mode: str = "full"
     use_shallow_features: bool = True
     use_soft_nms: bool = True
+    backbone_weights: str = "yolo26n.pt"
     heads: list[str] = field(default_factory=lambda: ["tiny_generator", "implicit_topo_sampler", "verification_mlp"])
 
 
@@ -29,6 +30,7 @@ class TrainingConfig:
     batch_size: int = 4
     val_batch_size: int = 2
     max_candidates: int = 200
+    eval_max_dets: int = 100
     use_amp: bool = False
     optimizer: str = "AdamW"
     lr: float = 5e-5
@@ -52,6 +54,9 @@ class LossConfig:
     focal_alpha: float = 0.75
     infonce_temperature: float = 0.07
     n_hard_negatives: int = 32
+    obj_weight: float = 2.0
+    cls_weight: float = 1.0
+    box_weight: float = 5.0
 
 
 @dataclass
@@ -61,7 +66,7 @@ class DataConfig:
     train_yaml: str = "data/bosch/train.yaml"
     val_yaml: str = "data/bosch/val.yaml"
     ultralytics_yaml: str = "../apps/worker/datasets/bstld.yaml"
-    image_size: tuple[int, int] = (720, 1280)
+    image_size: tuple[int, int] = (640, 1120)  # H×W, divisible by 32
     conf_threshold: float = 0.05
     eval_conf_threshold: float = 0.5
     soft_nms_sigma: float = 0.5

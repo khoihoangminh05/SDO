@@ -12,7 +12,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from utils.config import load_config
-from utils.fast_train import apply_fast_profile
+from utils.fast_train import apply_fast_profile, apply_proplus_profile
 from utils.trainer import train_ttld
 from utils.yolo_baseline import train_baseline
 
@@ -27,16 +27,32 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-steps", type=int, default=None, help="Stop after N optimizer steps (smoke test)")
     parser.add_argument("--batch-size", type=int, default=None, help="Override training.batch_size")
     parser.add_argument("--no-amp", action="store_true", help="Disable mixed-precision training")
-    parser.add_argument("--fast", action="store_true", help="Fast ablation profile (smaller data, fewer steps)")
+    parser.add_argument("--fast", action="store_true", help="Fast profile (short train)")
+    parser.add_argument("--proplus", action="store_true", help="Colab Pro+ longer profile")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
     cfg = load_config(args.config)
-    if args.fast:
+    if args.proplus and args.fast:
+        raise SystemExit("Use only one of --fast or --proplus")
+    if args.proplus:
+        apply_proplus_profile(cfg)
+        h, w = cfg.data.image_size
+        print(
+            f"PRO+ profile: {h}x{w}, {cfg.training.epochs} epochs, "
+            f"{cfg.training.max_train_batches} batches/epoch, "
+            f"subset={cfg.data.train_subset_ratio:.0%}, AMP off"
+        )
+    elif args.fast:
         apply_fast_profile(cfg)
-        print("FAST profile: 480x640, 12 epochs, 120 batches/epoch, AMP off, subset=25%")
+        h, w = cfg.data.image_size
+        print(
+            f"FAST profile: {h}x{w}, {cfg.training.epochs} epochs, "
+            f"{cfg.training.max_train_batches} batches/epoch, AMP off, "
+            f"subset={cfg.data.train_subset_ratio:.0%}"
+        )
     if args.batch_size is not None:
         cfg.training.batch_size = args.batch_size
     if args.no_amp:

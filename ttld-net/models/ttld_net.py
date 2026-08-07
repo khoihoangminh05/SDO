@@ -26,7 +26,8 @@ class TTLDNet(nn.Module):
     def __init__(self, cfg: TTLDConfig) -> None:
         super().__init__()
         self.cfg = cfg
-        self.backbone = YOLO26Backbone()
+        backbone_weights = getattr(cfg.model, "backbone_weights", "yolo26n.pt")
+        self.backbone = YOLO26Backbone(weights=backbone_weights)
         self.neck = FPNPANet()
         self.generator = TinyGenerator(
             conf_threshold=cfg.data.conf_threshold,
@@ -44,6 +45,31 @@ class TTLDNet(nn.Module):
         )
         self.verifier = VerificationMLP()
         self._stack_ready = False
+
+    def materialize(self, device: torch.device, image_size: tuple[int, int] | None = None) -> "TTLDNet":
+        """
+        Build lazy backbone + neck **before** creating the optimizer / loading ckpt.
+
+        Without this, ``_ensure_stack`` replaces ``neck`` after AdamW is created,
+        so neck/backbone never receive ``optimizer.step()`` updates.
+        """
+        h, w = image_size or tuple(self.cfg.data.image_size)
+        self.to(device)
+        was_training = self.training
+        self.eval()
+        with torch.no_grad():
+            dummy = torch.zeros(1, 3, h, w, device=device)
+            self.forward(dummy)
+        if was_training:
+            self.train()
+        # Safety: every trainable param must exist now.
+        n_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        if n_params < 1_000_000:
+            raise RuntimeError(
+                f"TTLDNet.materialize produced only {n_params} trainable params — "
+                "backbone/neck likely failed to initialize."
+            )
+        return self
 
     def _ensure_stack(self, device: torch.device, image_size: tuple[int, int] = (640, 640)) -> None:
         if self._stack_ready:
@@ -90,10 +116,11 @@ class TTLDNet(nn.Module):
 
     def forward(self, images: torch.Tensor) -> dict[str, Any]:
         """
-        Forward pass.
+        Forward pass by ablation mode:
 
-        Phase 2–3 (shallow modes): stage-1 + context branch outputs.
-        Phase 4+: adds topology sampler and verification when mode=full.
+        - ``shallow`` / ``shallow_focal``: Stage-1 generator + context features
+        - ``topology``: + ImplicitTopologySampler (zi)
+        - ``full``: + VerificationMLP (p_valid)
         """
         stage1 = self.forward_stage1(images)
         context = self.forward_context(stage1)
@@ -157,6 +184,9 @@ class TTLDNet(nn.Module):
             det_fn = DetectionLoss(
                 gamma=self.cfg.loss.focal_gamma,
                 alpha=self.cfg.loss.focal_alpha,
+                obj_weight=float(getattr(self.cfg.loss, "obj_weight", 2.0)),
+                cls_weight=float(getattr(self.cfg.loss, "cls_weight", 1.0)),
+                box_weight=float(getattr(self.cfg.loss, "box_weight", 5.0)),
             )
         if outputs.get("raw_outputs"):
             loss_det = det_fn(outputs["raw_outputs"], targets)

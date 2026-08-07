@@ -29,7 +29,7 @@ class YOLO26Backbone(nn.Module):
     def __init__(
         self,
         yaml_path: str | Path | None = None,
-        weights: str | Path | None = None,
+        weights: str | Path | None = "yolo26n.pt",
     ) -> None:
         super().__init__()
         self.yaml_path = Path(yaml_path) if yaml_path else (
@@ -39,7 +39,11 @@ class YOLO26Backbone(nn.Module):
             / "models"
             / "yolo26_p2.yaml"
         )
-        self.weights = Path(weights) if weights else None
+        # Keep string so Ultralytics can download e.g. "yolo26n.pt"
+        if weights is None:
+            self.weights: str | None = None
+        else:
+            self.weights = str(weights)
         self._impl: nn.Module | None = None
         self._channel_dims: dict[str, int] = {}
         self._save_indices = set(_BACKBONE_LAYERS.values())
@@ -57,11 +61,42 @@ class YOLO26Backbone(nn.Module):
         if not self.yaml_path.is_file():
             raise FileNotFoundError(f"YOLO yaml not found: {self.yaml_path}")
 
+        # Always build P2 architecture from yaml, then transfer pretrained weights.
         yolo = YOLO(str(self.yaml_path))
-        if self.weights is not None and self.weights.is_file():
-            yolo = YOLO(str(self.weights))
+        if self.weights:
+            self._load_pretrained(yolo, self.weights)
+        # Assigning nn.Module registers it for state_dict / optimizer / .train().
         self._impl = yolo.model
-        self._impl.eval()
+
+    @staticmethod
+    def _load_pretrained(yolo: Any, weights: str) -> None:
+        """Copy matching tensors from a pretrained Ultralytics checkpoint."""
+        try:
+            from ultralytics import YOLO
+        except ImportError:
+            return
+
+        weight_path = Path(weights)
+        src_ref = str(weight_path) if weight_path.is_file() else weights
+        try:
+            pretrained = YOLO(src_ref)
+        except Exception as exc:  # pragma: no cover
+            print(f"[YOLO26Backbone] pretrained load skipped ({src_ref}): {exc}")
+            return
+
+        src = pretrained.model.state_dict()
+        dst = yolo.model.state_dict()
+        matched = {
+            k: v for k, v in src.items()
+            if k in dst and dst[k].shape == v.shape
+        }
+        missing = len(dst) - len(matched)
+        yolo.model.load_state_dict({**dst, **matched}, strict=True)
+        print(
+            f"[YOLO26Backbone] pretrained '{src_ref}': "
+            f"{len(matched)}/{len(dst)} tensors matched "
+            f"({missing} layers keep YAML init — expected for P2 vs detect head)."
+        )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, ...]:
         """
@@ -118,8 +153,6 @@ class YOLO26Backbone(nn.Module):
 
         height, width = image_size
         dummy = torch.zeros(1, 3, height, width)
-        device = next(self.parameters(), torch.tensor(0)).device
-        # Module may have no parameters until lazy init
         self._lazy_init()
         assert self._impl is not None
         device = next(self._impl.parameters()).device

@@ -37,6 +37,37 @@ def test_yolo_dir_dataset_and_fallback(tmp_path: Path) -> None:
     assert image.shape == (3, 720, 1280)
     assert boxes.shape[1] == 5
     assert boxes[0, 4] == 0.0  # yolo green -> TTLD Green
+    # Native denorm: 0.5 * 1280/720, 0.05 * native
+    assert torch.allclose(boxes[0, :4], torch.tensor([640.0, 360.0, 64.0, 36.0]), atol=1e-3)
+
+
+def test_yolo_dir_no_double_scale_on_resize(tmp_path: Path) -> None:
+    """YOLO GT must use native size then Resize once — not target size twice."""
+    from PIL import Image
+
+    from data.dataset import create_dataloader
+
+    img_dir = tmp_path / "rgb" / "val"
+    img_dir.mkdir(parents=True)
+    Image.new("RGB", (1280, 720), color=(0, 0, 0)).save(img_dir / "frame.png")
+    (img_dir / "frame.txt").write_text("2 0.5 0.5 0.05 0.05\n", encoding="utf-8")
+
+    loader = create_dataloader(
+        img_dir,
+        batch_size=1,
+        num_workers=0,
+        shuffle=False,
+        split="val",
+        image_size=(576, 1024),  # proplus H×W
+    )
+    _, targets = next(iter(loader))
+    box = targets[0][0, :4]
+    # Correct: native denorm then ×(1024/1280, 576/720) → (512, 288, 51.2, 28.8)
+    expected = torch.tensor([512.0, 288.0, 51.2, 28.8])
+    assert torch.allclose(box, expected, atol=0.05), f"got {box.tolist()}, expected {expected.tolist()}"
+    # Buggy double-scale would be ≈ (409.6, 230.4, 40.96, 23.04)
+    buggy = torch.tensor([409.6, 230.4, 40.96, 23.04])
+    assert not torch.allclose(box, buggy, atol=1.0)
 
 
 @pytest.mark.skipif(SKIP_NO_DATA, reason="BSTLD train.yaml not found")

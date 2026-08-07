@@ -21,7 +21,7 @@ def test_backbone_p1_p5_shapes() -> None:
     """T2.1 — Backbone emits five pyramid levels."""
     from models.backbones.yolo26 import YOLO26Backbone
 
-    backbone = YOLO26Backbone(yaml_path=YAML)
+    backbone = YOLO26Backbone(yaml_path=YAML, weights=None)
     dummy = torch.zeros(1, 3, 640, 640)
     p1, p2, p3, p4, p5 = backbone(dummy)
 
@@ -86,7 +86,7 @@ def test_phase2_stack_smoke() -> None:
     from models.heads.tiny_generator import TinyGenerator
     from models.necks.fpn_panet import FPNPANet
 
-    backbone = YOLO26Backbone(yaml_path=YAML)
+    backbone = YOLO26Backbone(yaml_path=YAML, weights=None)
     dims = backbone.channel_dims((640, 640))
     neck = FPNPANet(
         in_channels=(dims["p1"], dims["p2"], dims["p3"], dims["p4"], dims["p5"]),

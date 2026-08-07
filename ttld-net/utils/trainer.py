@@ -146,16 +146,23 @@ def train_ttld(
         gc.collect()
         torch.backends.cudnn.benchmark = True
 
-    model = TTLDNet(cfg).to(torch_device)
+    model = TTLDNet(cfg)
+    image_size = tuple(cfg.data.image_size)
+    # CRITICAL: materialize lazy backbone/neck BEFORE optimizer / checkpoint load.
+    model.materialize(torch_device, image_size)
+
     if resume:
         state = torch.load(resume, map_location=torch_device, weights_only=False)
-        model.load_state_dict(state["model"], strict=False)
+        missing, unexpected = model.load_state_dict(state["model"], strict=False)
+        print(
+            f"Resumed {resume} | missing={len(missing)} unexpected={len(unexpected)}",
+            flush=True,
+        )
 
     train_yaml = resolve_path(cfg.data.train_yaml)
     val_yaml = resolve_path(cfg.data.val_yaml)
     val_batch_size = getattr(cfg.training, "val_batch_size", None) or min(cfg.training.batch_size, 2)
 
-    image_size = tuple(cfg.data.image_size)
     subset_ratio = float(getattr(cfg.data, "train_subset_ratio", 1.0))
 
     train_loader = create_dataloader(
@@ -179,10 +186,35 @@ def train_ttld(
         subset_ratio=1.0,
     )
 
-    optimizer = AdamW(model.parameters(), lr=cfg.training.lr, weight_decay=1e-4)
+    backbone_params = [p for n, p in model.named_parameters() if n.startswith("backbone.") and p.requires_grad]
+    other_params = [p for n, p in model.named_parameters() if not n.startswith("backbone.") and p.requires_grad]
+    lr = cfg.training.lr
+    optimizer = AdamW(
+        [
+            {"params": backbone_params, "lr": lr * 0.2},
+            {"params": other_params, "lr": lr},
+        ],
+        weight_decay=1e-4,
+    )
+    opt_ids = {id(p) for g in optimizer.param_groups for p in g["params"]}
+    live = [p for p in model.parameters() if p.requires_grad]
+    orphan = [n for n, p in model.named_parameters() if p.requires_grad and id(p) not in opt_ids]
+    if orphan:
+        raise RuntimeError(
+            "Optimizer is missing trainable params (lazy stack bug): "
+            + ", ".join(orphan[:12])
+        )
+    print(
+        f"Optimizer params: backbone={sum(p.numel() for p in backbone_params):,} "
+        f"other={sum(p.numel() for p in other_params):,}",
+        flush=True,
+    )
     scheduler = build_scheduler(optimizer, cfg)
     use_amp = bool(getattr(cfg.training, "use_amp", False)) and torch_device.type == "cuda"
-    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    if hasattr(torch, "amp") and hasattr(torch.amp, "GradScaler"):
+        scaler = torch.amp.GradScaler("cuda", enabled=use_amp)
+    else:  # pragma: no cover
+        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
     aux_warmup = int(getattr(cfg.training, "aux_loss_warmup_steps", 5))
     log_interval = int(getattr(cfg.training, "log_interval", 50))
     val_max_batches = getattr(cfg.training, "val_max_batches", None)
@@ -197,6 +229,9 @@ def train_ttld(
         "detection": DetectionLoss(
             gamma=cfg.loss.focal_gamma,
             alpha=cfg.loss.focal_alpha,
+            obj_weight=float(getattr(cfg.loss, "obj_weight", 2.0)),
+            cls_weight=float(getattr(cfg.loss, "cls_weight", 1.0)),
+            box_weight=float(getattr(cfg.loss, "box_weight", 5.0)),
         ).to(torch_device),
         "infonce": InfoNCELoss(temperature=cfg.loss.infonce_temperature).to(torch_device),
     }
@@ -211,17 +246,25 @@ def train_ttld(
     last_path = output_dir / "last.pth"
 
     epochs = max_epochs or cfg.training.epochs
-    best_recall = -1.0
+    best_score = -1.0
     global_step = 0
     consecutive_bad = 0
+    last_val_metrics: dict[str, float] = {
+        "ap50": 0.0,
+        "recall": 0.0,
+        "precision": 0.0,
+        "tp": 0.0,
+        "fp": 0.0,
+    }
 
     use_verifier = cfg.model.mode == "full"
+    eval_max_dets = int(getattr(cfg.training, "eval_max_dets", 100))
 
     print(
         f"Training on {torch_device} | batch_size={cfg.training.batch_size} | "
         f"val_batch_size={val_batch_size} | max_candidates={model.generator.max_candidates} | "
         f"amp={use_amp} | lr={cfg.training.lr} | aux_warmup={aux_warmup} | "
-        f"image={image_size[0]}x{image_size[1]}"
+        f"image={image_size[0]}x{image_size[1]} | eval_max_dets={eval_max_dets}"
     )
     print(
         f"Dataset: up to {train_batches} train batches/epoch "
@@ -245,8 +288,6 @@ def train_ttld(
     print("Sanity check OK. Training started.", flush=True)
 
     import time
-
-    last_val_metrics: dict[str, float] = {}
 
     for epoch in range(epochs):
         model.train()
@@ -362,10 +403,10 @@ def train_ttld(
             global_step += 1
             steps_this_epoch += 1
 
-            writer.add_scalar("Loss/total", float(losses["total"]), global_step)
+            writer.add_scalar("Loss/total", float(losses["total"].detach()), global_step)
             for key in ("det", "topology", "verify"):
                 if key in losses:
-                    writer.add_scalar(f"Loss/{key}", float(losses[key]), global_step)
+                    writer.add_scalar(f"Loss/{key}", float(losses[key].detach()), global_step)
 
             step_loss = float(losses["total"].detach())
             for key, value in losses.items():
@@ -398,22 +439,28 @@ def train_ttld(
         do_val = is_last_epoch or ((epoch + 1) % eval_every == 0)
         if do_val:
             val_limit = val_max_batches if max_steps is None else 20
+            # Match test.py: high-recall generator needs a low conf for recall point.
+            eval_conf = min(cfg.data.conf_threshold, cfg.data.eval_conf_threshold)
             val_metrics = evaluate_model(
                 model,
                 val_loader,
                 torch_device,
-                conf_threshold=cfg.data.conf_threshold if max_steps is not None else cfg.data.eval_conf_threshold,
+                conf_threshold=eval_conf,
                 use_verifier=use_verifier if max_steps is None else False,
                 max_batches=val_limit,
+                max_dets=eval_max_dets,
             )
             last_val_metrics = val_metrics
             for key, value in val_metrics.items():
-                if key in {"ap50", "apsmall", "recall", "precision", "fpr"}:
+                if key in {"ap50", "apsmall", "recall", "precision", "fpr", "tp", "fp"}:
                     writer.add_scalar(f"Metrics/{key}", value, epoch)
 
-            recall = val_metrics.get("recall", 0.0)
-            if recall >= best_recall:
-                best_recall = recall
+            # Prefer true AP50; fall back to recall early when AP still ~0.
+            score = float(val_metrics.get("ap50", 0.0))
+            if score <= 1e-8:
+                score = 0.5 * float(val_metrics.get("recall", 0.0))
+            if score >= best_score:
+                best_score = score
                 _save_checkpoint(best_path, model, optimizer, epoch, val_metrics)
                 save_metrics(val_metrics, output_dir / "best_metrics.json")
         else:
@@ -426,7 +473,10 @@ def train_ttld(
             f"Epoch {epoch + 1}/{epochs} | "
             f"loss={epoch_losses.get('total', 0) / num_steps:.4f} | "
             f"recall={val_metrics.get('recall', 0):.4f} | "
-            f"ap50={val_metrics.get('ap50', 0):.4f}{val_note}"
+            f"precision={val_metrics.get('precision', 0):.4f} | "
+            f"ap50={val_metrics.get('ap50', 0):.4f} | "
+            f"tp={int(val_metrics.get('tp', 0))} fp={int(val_metrics.get('fp', 0))}"
+            f"{val_note}"
         )
 
         if max_steps is not None and global_step >= max_steps:

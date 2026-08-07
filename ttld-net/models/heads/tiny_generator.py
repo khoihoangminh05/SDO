@@ -145,7 +145,8 @@ class TinyGenerator(nn.Module):
     ) -> None:
         batch, _, height, width = obj.shape
         obj_p = obj.sigmoid()
-        cls_p = cls.sigmoid()
+        # Match DetectionLoss focal CE (softmax), not independent sigmoid.
+        cls_p = cls.softmax(dim=1)
         scores, class_ids = cls_p.max(dim=1)
         conf = obj_p.squeeze(1) * scores
 
@@ -180,6 +181,9 @@ class TinyGenerator(nn.Module):
                 cy_v = float(cy[b, y, x].detach())
                 bw_v = float(bw[b, y, x].detach())
                 bh_v = float(bh[b, y, x].detach())
+                # BSTLD lights are tiny; drop absurd boxes before Soft-NMS.
+                if bw_v < 1.0 or bh_v < 1.0 or bw_v > 64.0 or bh_v > 96.0:
+                    continue
                 per_image[b].append(
                     {
                         "bbox": (cx_v, cy_v, bw_v, bh_v),  # xywh (pixel)
@@ -210,7 +214,13 @@ class TinyGenerator(nn.Module):
         scores = torch.tensor([c["confidence"] for c in cands], device=device, dtype=torch.float32)
         feat_mat = torch.stack(feats, dim=0)
 
-        keep_boxes, keep_scores = soft_nms(boxes, scores, sigma=self.soft_nms_sigma)
+        keep_boxes, keep_scores = soft_nms(
+            boxes,
+            scores,
+            sigma=self.soft_nms_sigma,
+            score_thresh=self.conf_threshold,
+            max_keep=self.max_candidates,
+        )
         if keep_boxes.numel() == 0:
             return [], torch.zeros(0, self.fcand_dim, device=device)
 
@@ -243,7 +253,13 @@ class TinyGenerator(nn.Module):
         self, boxes: torch.Tensor, scores: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Apply Gaussian Soft-NMS with configured sigma."""
-        return soft_nms(boxes, scores, sigma=self.soft_nms_sigma)
+        return soft_nms(
+            boxes,
+            scores,
+            sigma=self.soft_nms_sigma,
+            score_thresh=self.conf_threshold,
+            max_keep=self.max_candidates,
+        )
 
 
 def _pairwise_iou(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:

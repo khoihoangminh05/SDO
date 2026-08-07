@@ -1,13 +1,30 @@
 # SDO — Smart Detection & Optimization
 
-Monorepo gồm **hai phần**:
+Monorepo with two complementary parts:
 
-| Phần | Thư mục | Mục đích |
-|------|---------|----------|
-| **TTLD-Net** (research) | `ttld-net/` | Train & evaluate topology-aware tiny traffic-light detector |
-| **SDO** (demo system) | `apps/` | Web UI + API + inference pipeline (YOLO, HSV, OCR) |
+| Part | Path | Purpose |
+|------|------|---------|
+| **TTLD-Net** | [`ttld-net/`](ttld-net/) | Research code: topology-aware tiny traffic-light detection |
+| **SDO apps** | [`apps/`](apps/) | Demo stack: viewer, API, YOLO/HSV/OCR worker |
 
-Tài liệu kế hoạch: `document/` (đọc `Context.md` → `TTLD_Net_PROJECT_SPEC.md` → `TTLD_Net_PLAN.md` → `PROJECT_STATE.md`).
+Research docs: [`document/`](document/) (`TTLD_Net_PROJECT_SPEC.md` → `TTLD_Net_PLAN.md` → `PROJECT_STATE.md`).
+
+---
+
+## Quick links
+
+- **TTLD-Net README (start here for the thesis/code review):** [`ttld-net/README.md`](ttld-net/README.md)
+- **Ablation configs:** `ttld-net/configs/m0_baseline.yaml` … `m4_full_ttld.yaml`
+- **Phase status:** [`document/PROJECT_STATE.md`](document/PROJECT_STATE.md)
+
+```bash
+cd ttld-net
+pip install -r requirements.txt
+python -m pytest tests/ -q
+python train.py --config configs/m1_shallow.yaml --output logs/ablation/m1_shallow --device 0
+```
+
+Dataset (BSTLD) lives under `apps/worker/datasets/` and is **not** shipped in git.
 
 ---
 
@@ -15,39 +32,20 @@ Tài liệu kế hoạch: `document/` (đọc `Context.md` → `TTLD_Net_PROJECT
 
 ```
 .
-├── document/              # Research specs, plan, project state
-├── ttld-net/              # TTLD-Net research codebase (train/test)
-├── apps/
-│   ├── frontend/          # Next.js viewer
-│   ├── orchestrator/      # NestJS API + Redis cache
-│   └── worker/            # FastAPI YOLO + HSV + OCR worker
-├── packages/types/        # Shared TypeScript types
-├── presentation/          # Research slides (HTML)
-├── report/                # Project report (HTML)
-├── archive/               # Legacy scripts moved from root
-├── docker-compose.yml     # Redis (extend for full stack later)
-└── pnpm-workspace.yaml
+├── document/           Research specs & project state
+├── ttld-net/           Train / eval / ablation (PyTorch)
+├── apps/               Frontend, orchestrator, worker
+├── packages/types/     Shared TypeScript types
+├── presentation/       Slides
+└── report/             Project report assets
 ```
 
 ---
 
-## TTLD-Net (research)
+## License
 
-```bash
-cd ttld-net
-pip install -r requirements.txt
-python test_env.py          # Phase 0 gate
-python -m pytest tests/     # Unit tests for scaffold modules
-```
-
-Training / evaluation (after implementing phases):
-
-```bash
-python train.py --config configs/m0_baseline.yaml --output logs/ablation/m0_baseline
-python test.py --config configs/m0_baseline.yaml --weights checkpoints/m0_baseline_best.pth --output results/ablation/m0_baseline_metrics.json
-```
-
-Dataset: Bosch BSTLD under `apps/worker/datasets/` (see `ttld-net/data/bosch/README.md`).
+TTLD-Net research code: MIT (`ttld-net/LICENSE`).  
+Application packages may carry their own licenses where noted.
 
 ---
 

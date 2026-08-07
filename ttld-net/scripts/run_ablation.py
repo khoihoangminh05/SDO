@@ -39,9 +39,31 @@ def main() -> None:
     parser.add_argument("--max-epochs", type=int, default=None, help="Override epochs in config")
     parser.add_argument("--skip-train", action="store_true")
     parser.add_argument("--skip-test", action="store_true")
-    parser.add_argument("--fast", action="store_true", help="Fast ablation profile (~1h/model on 4090)")
+    parser.add_argument("--fast", action="store_true", help="Fast ablation profile (~1h/model)")
+    parser.add_argument("--proplus", action="store_true", help="Colab Pro+ longer profile (~2-4h/model)")
+    parser.add_argument(
+        "--eval-conf",
+        type=float,
+        default=None,
+        help="Override eval confidence for all variants",
+    )
+    parser.add_argument(
+        "--eval-conf-ttld",
+        type=float,
+        default=0.05,
+        help="Default eval conf for M1-M4 when --eval-conf is not set",
+    )
+    parser.add_argument(
+        "--eval-conf-baseline",
+        type=float,
+        default=0.5,
+        help="Default eval conf for M0 when --eval-conf is not set",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+
+    if args.fast and args.proplus:
+        raise SystemExit("Use only one of --fast or --proplus")
 
     for name in args.configs:
         config = ROOT / "configs" / f"{name}.yaml"
@@ -62,13 +84,15 @@ def main() -> None:
                 "--device",
                 str(args.device),
             ]
-            if args.fast:
+            if args.proplus:
+                train_cmd.append("--proplus")
+            elif args.fast:
                 train_cmd.append("--fast")
             elif not args.amp:
                 train_cmd.append("--no-amp")
             if args.batch_size is not None:
                 train_cmd.extend(["--batch-size", str(args.batch_size)])
-            elif not args.fast:
+            elif not args.fast and not args.proplus:
                 train_cmd.extend(["--batch-size", "2"])
             if args.max_steps is not None:
                 train_cmd.extend(["--max-steps", str(args.max_steps)])
@@ -80,6 +104,12 @@ def main() -> None:
             weights = ROOT / "checkpoints" / f"{name}_best.pth"
             if name == "m0_baseline":
                 weights = ROOT / "checkpoints" / "m0_baseline_best.pt"
+            if args.eval_conf is not None:
+                eval_conf = args.eval_conf
+            elif name == "m0_baseline":
+                eval_conf = args.eval_conf_baseline
+            else:
+                eval_conf = args.eval_conf_ttld
             test_cmd = [
                 sys.executable,
                 "test.py",
@@ -91,7 +121,15 @@ def main() -> None:
                 f"results/ablation/{name}_metrics.json",
                 "--device",
                 str(args.device),
+                "--conf",
+                str(eval_conf),
+                "--max-dets",
+                "100",
             ]
+            if args.proplus:
+                test_cmd.append("--proplus")
+            elif args.fast:
+                test_cmd.append("--fast")
             _run(test_cmd, args.dry_run)
 
     if not args.skip_test and not args.dry_run:

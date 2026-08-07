@@ -45,6 +45,9 @@ ttld-net/logs/
 ttld-net/checkpoints/
 ttld-net/results/
 
+# Packaged Colab artifacts (regenerate with scripts/pack_colab.*)
+/ttld_colab_code.zip
+
 # Large datasets (keep YAML configs, ignore image trees)
 apps/worker/datasets/dataset_*/
 ttld-net/data/bosch/images/

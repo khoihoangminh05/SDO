@@ -61,17 +61,24 @@ def resolve_dataset_path(path: str | Path) -> tuple[Path, str]:
 
 
 class YoloDirDataset(Dataset):
-    """Load BSTLD images with sidecar YOLO .txt labels (val sample layout)."""
+    """Load BSTLD images with sidecar YOLO .txt labels (val sample layout).
+
+    YOLO labels are normalized to the **native** image size. Denormalize with
+    ``image.size`` only; ``ResizeWithBoxes`` then scales to the train/val
+    ``image_size``. Never denormalize with the target size — that double-scales
+    GT and forces IoU≈0 / AP50=0 whenever ``image_size ≠ native``.
+    """
 
     def __init__(
         self,
         image_dir: str | Path,
         transform: Callable[..., Any] | None = None,
-        image_width: int = 1280,
-        image_height: int = 720,
+        image_width: int | None = None,
+        image_height: int | None = None,
     ) -> None:
         self.image_dir = Path(image_dir)
         self.transform = transform
+        # Deprecated: kept for API compat; denorm always uses PIL image.size.
         self.image_width = image_width
         self.image_height = image_height
         self.samples = sorted(self.image_dir.glob("**/*.png"))
@@ -90,7 +97,8 @@ class YoloDirDataset(Dataset):
         except OSError as exc:
             raise RuntimeError(f"Corrupt image: {image_path}") from exc
 
-        boxes = self._load_yolo_labels(image_path.with_suffix(".txt"))
+        native_w, native_h = image.size
+        boxes = self._load_yolo_labels(image_path.with_suffix(".txt"), native_w, native_h)
         if self.transform is not None:
             image, boxes = self.transform(image, boxes)
         elif not isinstance(image, torch.Tensor):
@@ -98,7 +106,9 @@ class YoloDirDataset(Dataset):
 
         return image, boxes
 
-    def _load_yolo_labels(self, label_path: Path) -> torch.Tensor:
+    def _load_yolo_labels(
+        self, label_path: Path, image_width: int, image_height: int
+    ) -> torch.Tensor:
         if not label_path.is_file():
             return torch.zeros((0, 5), dtype=torch.float32)
 
@@ -108,10 +118,10 @@ class YoloDirDataset(Dataset):
             if len(parts) < 5:
                 continue
             yolo_cls = int(float(parts[0]))
-            cx = float(parts[1]) * self.image_width
-            cy = float(parts[2]) * self.image_height
-            bw = float(parts[3]) * self.image_width
-            bh = float(parts[4]) * self.image_height
+            cx = float(parts[1]) * image_width
+            cy = float(parts[2]) * image_height
+            bw = float(parts[3]) * image_width
+            bh = float(parts[4]) * image_height
             cls_id = YOLO_TO_TTLD_CLASS.get(yolo_cls, 3)
             parsed.append([cx, cy, bw, bh, float(cls_id)])
 
@@ -269,12 +279,8 @@ def create_dataloader(
         root = Path(images_root) if images_root else resolved.parent
         dataset: Dataset = BoschDataset(resolved, transform=transform, images_root=root)
     else:
-        dataset = YoloDirDataset(
-            resolved,
-            transform=transform,
-            image_width=width,
-            image_height=height,
-        )
+        # Do not pass target W/H — YOLO denorm must use native image size.
+        dataset = YoloDirDataset(resolved, transform=transform)
 
     if split == "train" and subset_ratio < 1.0:
         dataset = SubsetDataset(dataset, ratio=subset_ratio)
